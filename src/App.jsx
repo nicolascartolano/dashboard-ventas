@@ -12,7 +12,7 @@ import {
 const LIME_NEON = "#d4ff00";
 const LIME_MID = "#b8df00";
 const LIME_DARK = "#8ca900";
-çconst BG_PURE_BLACK = "bg-black";
+const BG_PURE_BLACK = "bg-black";
 const CARD_DARK = "bg-[#0a0a0a]";
 
 const COLORS = [LIME_NEON, '#ffffff', '#e5e5e5', '#a3a3a3', '#525252'];
