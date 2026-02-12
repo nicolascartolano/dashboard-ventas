@@ -593,8 +593,7 @@ export default function App() {
                   const style = getRankingStyle(i);
                   return (
                     <div key={p.fullName} className={`bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.02]`}>
-                      {/* Siluetas de Productos: Gris más claro y más notorias */}
-                      <div className="absolute -right-4 -bottom-4 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity pointer-events-none -rotate-12">
+                      <div className="absolute -right-4 -bottom-4 opacity-15 group-hover:opacity-25 transition-opacity pointer-events-none -rotate-12">
                         <Trophy size={110} strokeWidth={1.5} className="text-zinc-200" />
                       </div>
                       
@@ -632,8 +631,7 @@ export default function App() {
                   
                   return (
                     <div key={s.name} className={`flex items-center justify-between group p-6 rounded-2xl border border-white/10 bg-[#0a0a0a] hover:bg-white/[0.03] transition-all relative overflow-hidden`}>
-                      {/* Silueta de Copa: Gris más claro, inclinada -15deg para estilo moderno, más notoria */}
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-[0.06] group-hover:opacity-[0.15] transition-opacity pointer-events-none -rotate-[15deg] transform origin-center">
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none -rotate-[15deg] transform origin-center">
                          <Trophy size={100} strokeWidth={1} className="text-zinc-200" />
                       </div>
                       
@@ -652,14 +650,18 @@ export default function App() {
                         </div>
                         <div className="flex flex-col items-end min-w-[70px] shrink-0">
                           <span className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">Share</span>
-                          {/* Share en amarillo con opacidad reducida para jerarquía */}
-                          <span className="font-black text-[15px] tabular-nums text-[#d4ff00]/60 group-hover:text-[#d4ff00]/80 transition-colors">{sharePercent}%</span>
+                          <span className="font-black text-[15px] tabular-nums text-[#d4ff00]/60 transition-colors group-hover:text-[#d4ff00]/80">
+                            {sharePercent}%
+                          </span>
                         </div>
                       </div>
                       
                       <div className="text-right w-1/4 relative z-10 shrink-0">
                         <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">{s.count} VENTAS</p>
-                        <p className={`text-[19px] font-bold tabular-nums text-[#d4ff00]`}>{fmt(s.val)}</p>
+                        {/* El monto cambia a blanco del top 4 (índice 3) para abajo */}
+                        <p className={`text-[19px] font-bold tabular-nums ${i < 3 ? 'text-[#d4ff00]' : 'text-white'}`}>
+                          {fmt(s.val)}
+                        </p>
                       </div>
                     </div>
                   );
@@ -669,7 +671,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <footer className="mt-20 py-10 text-center border-t border-white/10 bg-black/50"><p className="text-[10px] font-black text-white/40 uppercase tracking-[0.5em]">Sellers Management System • 2026</p></footer>
+      <footer className="mt-20 py-10 text-center border-t border-white/10 bg-black/50"><p className="text-[10px] font-black text-white/40 uppercase tracking-[0.5em]">Arjaus Management System • 2026</p></footer>
     </div>
   );
 }
