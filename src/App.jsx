@@ -353,6 +353,29 @@ export default function App() {
     return null;
   };
 
+  const getRankingStyle = (index) => {
+    if (index === 0) return { 
+      color: "text-[#d4ff00]", 
+      shadow: "drop-shadow-[0_0_8px_rgba(212,255,0,0.5)]", 
+      iconColor: "text-[#d4ff00]"
+    };
+    if (index === 1) return { 
+      color: "text-[#d4ff00]/70", 
+      shadow: "drop-shadow-[0_0_4px_rgba(212,255,0,0.2)]", 
+      iconColor: "text-[#d4ff00]/70"
+    };
+    if (index === 2) return { 
+      color: "text-[#d4ff00]/40", 
+      shadow: "", 
+      iconColor: "text-[#d4ff00]/40"
+    };
+    return { 
+      color: "text-white/40", 
+      shadow: "", 
+      iconColor: "text-white/40"
+    };
+  };
+
   return (
     <div className={`min-h-screen ${BG_PURE_BLACK} text-white font-sans selection:bg-[#d4ff00] selection:text-black pb-20`}>
       <header className="border-b border-white/10 px-10 h-20 flex items-center justify-between sticky top-0 bg-black/80 backdrop-blur-2xl z-50">
@@ -425,7 +448,7 @@ export default function App() {
                   <div className="flex items-center gap-1.5 px-2 py-0.5 border border-white/10 bg-white/5 rounded-full"><div className="w-1 h-1 rounded-full bg-[#d4ff00] animate-pulse" /><span className="text-[8px] font-black text-white/60 tracking-[0.1em] uppercase">{audit.guaranteedCount} GARANTIZADAS</span></div>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">OPERACIONES TOTALES</p>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">INSCRIPCIONES TOTALES</p>
                   <h2 className="text-5xl font-bold tracking-tight">{audit.totalCount}</h2>
                   <p className="text-[9px] text-white/60 mt-1 font-bold tracking-widest uppercase">REGISTROS PROCESADOS</p>
                 </div>
@@ -476,7 +499,7 @@ export default function App() {
                   <div className="w-16 h-16 bg-[#d4ff00]/10 rounded-2xl flex items-center justify-center mx-auto mb-6"><BarChart3 className="w-8 h-8 text-[#d4ff00]" /></div>
                   <p className="text-[10px] font-black text-white/60 uppercase tracking-[0.4em] mb-2">PROM. DIARIO (PERIODO)</p>
                   <div className="text-4xl font-bold tracking-tighter mb-2">{fmt(audit.activityTimeline.reduce((s, a) => s + a.total, 0) / 30)}</div>
-                  <p className="text-[9px] text-white/60 font-bold uppercase tracking-widest">Cálculo 30 días naturales</p>
+                  <p className="text-[9px] text-white/60 font-bold uppercase tracking-widest">Cálculo ultimos 30 días </p>
                </div>
             </div>
 
@@ -539,7 +562,7 @@ export default function App() {
 
                   <div className="w-full md:w-2/5 space-y-5">
                     <div className="mb-2">
-                       <h3 className="text-sm font-black text-white/40 uppercase tracking-[0.3em]">Portfolio Intelligence</h3>
+                       <h3 className="text-sm font-black text-white/40 uppercase tracking-[0.3em]">Portfolio</h3>
                        <p className="text-[10px] text-[#d4ff00] font-bold uppercase">Análisis de Distribución</p>
                     </div>
                     {audit.productsPie.map((p, i) => (
@@ -564,31 +587,39 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Top 3 List */}
+              {/* Top 3 List (Productos) */}
               <div className="lg:col-span-5 grid grid-cols-1 gap-4">
-                {audit.top3Products.map((p, i) => (
-                  <div key={p.fullName} className="bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-[#111]">
-                    <div className="flex items-center gap-5 relative z-10 min-w-0 flex-1">
-                      <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border transition-all duration-500 ${i === 0 ? 'bg-[#d4ff00]/10 border-[#d4ff00]/40 group-hover:bg-[#d4ff00]/20' : 'bg-white/5 border-white/10 group-hover:border-white/20'}`}>
-                        {i === 0 ? <Award className="w-6 h-6 text-[#d4ff00]" /> : <Trophy className="w-5 h-5 text-white/60" />}
+                {audit.top3Products.map((p, i) => {
+                  const style = getRankingStyle(i);
+                  return (
+                    <div key={p.fullName} className={`bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.02]`}>
+                      {/* Siluetas de Productos: Gris más claro y más notorias */}
+                      <div className="absolute -right-4 -bottom-4 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity pointer-events-none -rotate-12">
+                        <Trophy size={110} strokeWidth={1.5} className="text-zinc-200" />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em] mb-0.5">Rank #0{i+1}</p>
-                        <InstantTooltip text={p.fullName}>
-                          <h4 className="text-[13px] font-bold text-white group-hover:text-[#d4ff00] transition-colors uppercase tracking-tight truncate cursor-help block">{p.name}</h4>
-                        </InstantTooltip>
+                      
+                      <div className="flex items-center gap-5 relative z-10 min-w-0 flex-1">
+                        <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border border-white/10 bg-black/40 transition-all duration-500`}>
+                          {i === 0 ? <Trophy className={`w-6 h-6 ${style.iconColor} ${style.shadow}`} /> : <Award className={`w-5 h-5 ${style.iconColor}`} />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-[8px] font-black uppercase tracking-[0.2em] mb-0.5 text-white/40`}>Rank #0{i+1}</p>
+                          <InstantTooltip text={p.fullName}>
+                            <h4 className="text-[13px] font-bold text-white uppercase tracking-tight truncate cursor-help block">{p.name}</h4>
+                          </InstantTooltip>
+                        </div>
+                      </div>
+                      <div className="text-right relative z-10 shrink-0 ml-4">
+                        <div className={`font-bold tabular-nums tracking-tighter text-base leading-none mb-1 text-white`}>{fmt(p.value).replace('$', '')}</div>
+                        <p className="text-[9px] font-bold text-white/40 uppercase tracking-tighter leading-none">{p.count} OPERACIONES</p>
                       </div>
                     </div>
-                    <div className="text-right relative z-10 shrink-0 ml-4">
-                      <div className="text-[#d4ff00] font-bold tabular-nums tracking-tighter text-base leading-none mb-1">{fmt(p.value).replace('$', '')}</div>
-                      <p className="text-[9px] font-bold text-white/40 uppercase tracking-tighter leading-none">{p.count} OPERACIONES</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* Performance de Equipo */}
+            {/* Performance de Equipo (Ranking de Asesores) */}
             <div className="bg-[#0a0a0a] border border-white/10 p-12 rounded-[3rem]">
               <div className="flex items-center justify-between mb-12">
                 <div className="space-y-1"><h3 className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Performance de Equipo</h3><p className="text-xl font-bold text-white">Ranking de Asesores</p></div>
@@ -597,18 +628,39 @@ export default function App() {
               <div className="grid grid-cols-1 gap-3">
                 {audit.sellers.map((s, i) => {
                   const sharePercent = ((s.val / audit.totalRevenue) * 100).toFixed(1);
-                  let rankBg = "bg-white/5", rankColor = "text-white/40", rankBorder = "border-white/10";
-                  if (i === 0) { rankBg = "bg-[#d4ff00]/10"; rankColor = "text-[#d4ff00]"; rankBorder = "border-[#d4ff00]/40"; }
+                  const style = getRankingStyle(i);
+                  
                   return (
-                    <div key={s.name} className="flex items-center justify-between group bg-white/[0.01] p-6 rounded-2xl border border-white/[0.05] hover:bg-white/[0.03] transition-all relative overflow-hidden">
+                    <div key={s.name} className={`flex items-center justify-between group p-6 rounded-2xl border border-white/10 bg-[#0a0a0a] hover:bg-white/[0.03] transition-all relative overflow-hidden`}>
+                      {/* Silueta de Copa: Gris más claro, inclinada -15deg para estilo moderno, más notoria */}
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-[0.06] group-hover:opacity-[0.15] transition-opacity pointer-events-none -rotate-[15deg] transform origin-center">
+                         <Trophy size={100} strokeWidth={1} className="text-zinc-200" />
+                      </div>
+                      
                       <div className="flex items-center gap-6 w-1/4 relative z-10 min-w-0">
-                        <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border transition-all ${rankBg} ${rankColor} ${rankBorder}`}>{i+1}</div>
+                        <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border border-white/10 transition-all bg-black/40 ${i < 3 ? style.color + " " + style.shadow : "text-white/40"}`}>
+                          {i + 1}
+                        </div>
                         <InstantTooltip text={s.name}>
                           <span className="text-sm font-bold text-white/70 group-hover:text-white uppercase truncate block cursor-help">{s.name}</span>
                         </InstantTooltip>
                       </div>
-                      <div className="flex-1 flex items-center gap-12 px-10 hidden md:flex relative z-10"><div className="flex-1 opacity-20 group-hover:opacity-100 transition-opacity"><UserTrend data={s.trend} /></div><div className="flex flex-col items-end min-w-[70px] shrink-0"><span className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">Share</span><span className="font-black text-[15px] tabular-nums text-[#d4ff00]/90">{sharePercent}%</span></div></div>
-                      <div className="text-right w-1/4 relative z-10 shrink-0"><p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">{s.count} VENTAS</p><p className="text-[19px] font-bold tabular-nums text-white">{fmt(s.val)}</p></div>
+                      
+                      <div className="flex-1 flex items-center gap-12 px-10 hidden md:flex relative z-10">
+                        <div className="flex-1 opacity-20 group-hover:opacity-100 transition-opacity">
+                          <UserTrend data={s.trend} color={i < 3 ? LIME_NEON : "#555"} />
+                        </div>
+                        <div className="flex flex-col items-end min-w-[70px] shrink-0">
+                          <span className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">Share</span>
+                          {/* Share en amarillo con opacidad reducida para jerarquía */}
+                          <span className="font-black text-[15px] tabular-nums text-[#d4ff00]/60 group-hover:text-[#d4ff00]/80 transition-colors">{sharePercent}%</span>
+                        </div>
+                      </div>
+                      
+                      <div className="text-right w-1/4 relative z-10 shrink-0">
+                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">{s.count} VENTAS</p>
+                        <p className={`text-[19px] font-bold tabular-nums text-[#d4ff00]`}>{fmt(s.val)}</p>
+                      </div>
                     </div>
                   );
                 })}
