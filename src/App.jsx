@@ -15,7 +15,7 @@ const LIME_DARK = "#8ca900";
 const BG_PURE_BLACK = "bg-black";
 const CARD_DARK = "bg-[#0a0a0a]";
 
-const COLORS = [LIME_NEON, '#ffffff', '#e5e5e5', '#a3a3a3', '#525252'];
+const COLORS = [LIME_NEON, '#ffffff', '#e5e5e5', '#a3a3a3', '#737373'];
 const DEFAULT_LOGO_URL = "https://arjaus.com/img/isologotipo-blanco%20izquierda.svg";
 
 // --- COMPONENTES ATÓMICOS ---
@@ -38,7 +38,7 @@ const InstantTooltip = ({ text, children }) => {
       {children}
       {visible && text && (
         <div 
-          className="fixed z-[9999] pointer-events-none bg-zinc-950 border border-white/20 px-3 py-2 rounded shadow-2xl backdrop-blur-md animate-in fade-in duration-75"
+          className="fixed z-[9999] pointer-events-none bg-zinc-900 border border-white/30 px-3 py-2 rounded shadow-2xl backdrop-blur-md animate-in fade-in duration-75"
           style={{ top: coords.y, left: coords.x }}
         >
           <p className="text-[10px] font-bold text-white uppercase tracking-tight whitespace-nowrap">
@@ -96,7 +96,7 @@ const GlowCard = ({ children, className = "" }) => {
     <div 
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      className={`relative overflow-hidden group hover:translate-y-[-4px] hover:border-[#d4ff00]/30 transition-all duration-500 border border-white/10 ${className}`}
+      className={`relative overflow-hidden group hover:translate-y-[-4px] hover:border-[#d4ff00]/20 transition-all duration-500 border border-white/10 ${className}`}
     >
       <div 
         className="pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-100 transition-opacity duration-500"
@@ -118,12 +118,12 @@ const UserTrend = ({ data, color = LIME_NEON }) => (
 );
 
 const PortfolioCenterIcon = () => (
-  <div className="flex flex-col items-center justify-center opacity-40">
+  <div className="flex flex-col items-center justify-center opacity-60">
     <div className="relative">
       <Package size={42} strokeWidth={1} className="text-[#d4ff00] animate-pulse" />
       <div className="absolute inset-0 blur-lg bg-[#d4ff00]/20 -z-10"></div>
     </div>
-    <span className="text-[7px] font-black uppercase tracking-[0.3em] mt-2 text-white/50">Core Inventory</span>
+    <span className="text-[7px] font-black uppercase tracking-[0.3em] mt-2 text-white/70">Core Inventory</span>
   </div>
 );
 
@@ -315,14 +315,14 @@ export default function App() {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-zinc-950 border border-white/20 p-3 rounded shadow-2xl backdrop-blur-md">
+        <div className="bg-zinc-900 border border-white/30 p-3 rounded shadow-2xl backdrop-blur-md">
           <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">{data.label}</p>
           <div className="flex items-center justify-between gap-4">
-            <span className="text-white/60 text-[11px] font-bold uppercase">Monto:</span>
+            <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">Monto:</span>
             <span className="text-white font-black">{fmt(data.total)}</span>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <span className="text-white/60 text-[11px] font-bold uppercase">Ventas:</span>
+            <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">Ventas:</span>
             <span className="text-white font-black">{data.count}</span>
           </div>
         </div>
@@ -335,16 +335,16 @@ export default function App() {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-zinc-950 border border-white/20 p-4 rounded shadow-2xl backdrop-blur-xl">
-          <p className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">Producto</p>
+        <div className="bg-zinc-900 border border-white/30 p-4 rounded shadow-2xl backdrop-blur-xl">
+          <p className="text-[8px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">Producto</p>
           <p className="text-xs font-bold text-white uppercase leading-tight mb-2 max-w-[200px]">{data.fullName}</p>
-          <div className="h-[1px] bg-white/10 w-full mb-2"></div>
+          <div className="h-[1px] bg-white/20 w-full mb-2"></div>
           <div className="flex items-center justify-between gap-6">
-            <span className="text-[10px] text-white/50 font-medium">Volumen:</span>
+            <span className="text-[10px] text-white/80 font-medium">Volumen:</span>
             <span className="text-sm font-black text-white">{fmt(data.value)}</span>
           </div>
           <div className="flex items-center justify-between gap-6">
-            <span className="text-[10px] text-white/50 font-medium">Participación:</span>
+            <span className="text-[10px] text-white/80 font-medium">Participación:</span>
             <span className="text-xs font-bold text-white">{((data.value / audit.totalRevenue) * 100).toFixed(1)}%</span>
           </div>
         </div>
@@ -360,19 +360,19 @@ export default function App() {
       iconColor: "text-[#d4ff00]"
     };
     if (index === 1) return { 
-      color: "text-[#d4ff00]/70", 
+      color: "text-[#d4ff00]/80", 
       shadow: "drop-shadow-[0_0_4px_rgba(212,255,0,0.2)]", 
-      iconColor: "text-[#d4ff00]/70"
+      iconColor: "text-[#d4ff00]/80"
     };
     if (index === 2) return { 
-      color: "text-[#d4ff00]/40", 
+      color: "text-[#d4ff00]/60", 
       shadow: "", 
-      iconColor: "text-[#d4ff00]/40"
+      iconColor: "text-[#d4ff00]/60"
     };
     return { 
-      color: "text-white/40", 
+      color: "text-white/70", 
       shadow: "", 
-      iconColor: "text-white/40"
+      iconColor: "text-white/70"
     };
   };
 
@@ -387,15 +387,15 @@ export default function App() {
           </label>
           <div className="h-6 w-[1px] bg-white/20" />
           <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 leading-none">Sellers Management</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/70 leading-none">Management System</span>
             <span className="text-[13px] font-bold text-white tracking-wider uppercase">Panel de Control</span>
           </div>
         </div>
         <div className="flex items-center gap-3">
           {rawData.length > 0 && (
-            <button onClick={clearData} className="group flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 transition-all active:scale-95">
-              <Trash2 className="w-3.5 h-3.5 text-red-500" />
-              <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Limpiar</span>
+            <button onClick={clearData} className="group flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 transition-all active:scale-95">
+              <Trash2 className="w-3.5 h-3.5 text-red-500/80" />
+              <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">Limpiar</span>
             </button>
           )}
           <label className="text-[10px] font-black text-black uppercase cursor-pointer hover:bg-white/90 active:scale-95 transition-all bg-white px-5 py-2.5 rounded-xl flex items-center gap-2">
@@ -409,11 +409,11 @@ export default function App() {
         {!audit ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-in fade-in zoom-in duration-500">
             <div className="w-24 h-24 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center justify-center mb-8 relative group overflow-hidden">
-              <div className="absolute inset-0 bg-[#d4ff00]/10 translate-y-24 group-hover:translate-y-0 transition-transform duration-700" />
-              <Database className="text-white/60 w-10 h-10 group-hover:text-[#d4ff00] transition-colors relative z-10" />
+              <div className="absolute inset-0 bg-[#d4ff00]/5 translate-y-24 group-hover:translate-y-0 transition-transform duration-700" />
+              <Database className="text-white/50 w-10 h-10 group-hover:text-[#d4ff00] transition-colors relative z-10" />
             </div>
-            <h1 className="text-3xl font-light mb-4 text-white/80">Ready to <span className="text-white font-bold">Audit</span></h1>
-            <p className="text-xs text-white/60 uppercase tracking-[0.3em] mb-10">Selecciona tu base de datos para comenzar</p>
+            <h1 className="text-3xl font-light mb-4 text-white/90">Ready to <span className="text-white font-bold">Audit</span></h1>
+            <p className="text-xs text-white/70 uppercase tracking-[0.3em] mb-10">Selecciona tu base de datos para comenzar</p>
             <label className="bg-[#d4ff00] text-black px-12 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-[0_10px_30px_rgba(212,255,0,0.2)]">
               Importar Archivo CSV
               <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
@@ -428,7 +428,7 @@ export default function App() {
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">FACTURACIÓN TOTAL</p>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-xl font-bold text-[#d4ff00] opacity-70">$</span>
+                    <span className="text-xl font-bold text-[#d4ff00] opacity-80">$</span>
                     <AnimatedNumber value={audit.totalRevenue} />
                   </div>
                   <p className="text-[9px] text-white/60 mt-1 font-bold tracking-widest uppercase">BASADO EN {audit.totalCount} VENTAS</p>
@@ -445,7 +445,7 @@ export default function App() {
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52 relative">
                 <div className="flex justify-between items-start">
                   <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/10 flex items-center justify-center"><Database className="w-5 h-5 text-[#d4ff00]" /></div>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 border border-white/10 bg-white/5 rounded-full"><div className="w-1 h-1 rounded-full bg-[#d4ff00] animate-pulse" /><span className="text-[8px] font-black text-white/60 tracking-[0.1em] uppercase">{audit.guaranteedCount} GARANTIZADAS</span></div>
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 border border-white/10 bg-white/5 rounded-full"><div className="w-1 h-1 rounded-full bg-[#d4ff00] animate-pulse" /><span className="text-[8px] font-black text-white/70 tracking-[0.1em] uppercase">{audit.guaranteedCount} GARANTIZADAS</span></div>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">INSCRIPCIONES TOTALES</p>
@@ -459,7 +459,7 @@ export default function App() {
                   <div className="text-right">
                     <div className="flex items-center gap-1 justify-end">
                       <input type="number" value={targetBimestral} onChange={(e) => setTargetBimestral(Number(e.target.value))} className="bg-transparent text-[#d4ff00] font-black text-right text-sm outline-none border-b border-white/20 focus:border-[#d4ff00] w-24 transition-all" />
-                      <Edit2 className="w-3 h-3 text-white/60" />
+                      <Edit2 className="w-3 h-3 text-white/50" />
                     </div>
                   </div>
                 </div>
@@ -487,7 +487,7 @@ export default function App() {
                         <Tooltip cursor={{fill: 'rgba(212, 255, 0, 0.05)'}} content={<CustomActivityTooltip />} />
                         <Bar dataKey="total" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                           {audit.activityTimeline.map((entry, index) => {
-                            const intensity = entry.isZero ? 0.05 : 0.2 + (entry.total / audit.maxActivityVal) * 0.8;
+                            const intensity = entry.isZero ? 0.08 : 0.25 + (entry.total / audit.maxActivityVal) * 0.75;
                             return <Cell key={`cell-${index}`} fill={LIME_NEON} opacity={intensity} />;
                           })}
                         </Bar>
@@ -496,8 +496,8 @@ export default function App() {
                   </div>
                </div>
                <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-white/10 p-8 rounded-[2.5rem] flex flex-col justify-center text-center">
-                  <div className="w-16 h-16 bg-[#d4ff00]/10 rounded-2xl flex items-center justify-center mx-auto mb-6"><BarChart3 className="w-8 h-8 text-[#d4ff00]" /></div>
-                  <p className="text-[10px] font-black text-white/60 uppercase tracking-[0.4em] mb-2">PROM. DIARIO (PERIODO)</p>
+                  <div className="w-16 h-16 bg-[#d4ff00]/5 rounded-2xl flex items-center justify-center mx-auto mb-6"><BarChart3 className="w-8 h-8 text-[#d4ff00]" /></div>
+                  <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.4em] mb-2">PROM. DIARIO (PERIODO)</p>
                   <div className="text-4xl font-bold tracking-tighter mb-2">{fmt(audit.activityTimeline.reduce((s, a) => s + a.total, 0) / 30)}</div>
                   <p className="text-[9px] text-white/60 font-bold uppercase tracking-widest">Cálculo ultimos 30 días </p>
                </div>
@@ -513,7 +513,7 @@ export default function App() {
                     <defs><linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.3}/><stop offset="95%" stopColor={LIME_NEON} stopOpacity={0}/></linearGradient></defs>
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#888', fontSize: 10}} />
                     <YAxis hide />
-                    <Tooltip contentStyle={{backgroundColor: '#0a0a0a', border: '1px solid #333', borderRadius: '8px'}} formatter={(v) => [fmt(v), 'Ingresos']} />
+                    <Tooltip contentStyle={{backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px'}} formatter={(v) => [fmt(v), 'Ingresos']} />
                     <Area type="monotone" dataKey="val" stroke={LIME_NEON} fillOpacity={1} fill="url(#colorVal)" strokeWidth={3} isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -562,13 +562,13 @@ export default function App() {
 
                   <div className="w-full md:w-2/5 space-y-5">
                     <div className="mb-2">
-                       <h3 className="text-sm font-black text-white/40 uppercase tracking-[0.3em]">Portfolio</h3>
-                       <p className="text-[10px] text-[#d4ff00] font-bold uppercase">Análisis de Distribución</p>
+                       <h3 className="text-sm font-black text-white/80 uppercase tracking-[0.3em]">Portfolio</h3>
+                       <p className="text-[10px] text-[#d4ff00]/80 font-bold uppercase">Análisis de Distribución</p>
                     </div>
                     {audit.productsPie.map((p, i) => (
                       <div 
                         key={p.fullName} 
-                        className={`group/item transition-all duration-300 p-2 rounded-xl ${activeIndex === i ? 'bg-white/5 border-l-2 border-[#d4ff00]' : 'opacity-70 hover:opacity-100'}`}
+                        className={`group/item transition-all duration-300 p-2 rounded-xl ${activeIndex === i ? 'bg-white/5 border-l border-[#d4ff00]/50' : 'opacity-70 hover:opacity-100'}`}
                         onMouseEnter={() => setActiveIndex(i)}
                         onMouseLeave={() => setActiveIndex(null)}
                       >
@@ -576,9 +576,9 @@ export default function App() {
                           <InstantTooltip text={p.fullName}>
                             <span className="text-[11px] font-bold text-white uppercase truncate block max-w-[130px] cursor-help">{p.name}</span>
                           </InstantTooltip>
-                          <span className="text-[11px] font-black text-[#d4ff00] shrink-0 ml-2">{((p.value / audit.totalRevenue) * 100).toFixed(1)}%</span>
+                          <span className="text-[11px] font-black text-[#d4ff00]/90 shrink-0 ml-2">{((p.value / audit.totalRevenue) * 100).toFixed(1)}%</span>
                         </div>
-                        <div className="w-full h-[3px] bg-white/[0.05] rounded-full overflow-hidden">
+                        <div className="w-full h-[3px] bg-white/5 rounded-full overflow-hidden">
                           <div className="h-full transition-all duration-1000" style={{ width: `${(p.value / audit.totalRevenue) * 100}%`, backgroundColor: COLORS[i % COLORS.length] }} />
                         </div>
                       </div>
@@ -592,17 +592,17 @@ export default function App() {
                 {audit.top3Products.map((p, i) => {
                   const style = getRankingStyle(i);
                   return (
-                    <div key={p.fullName} className={`bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.02]`}>
-                      <div className="absolute -right-4 -bottom-4 opacity-15 group-hover:opacity-25 transition-opacity pointer-events-none -rotate-12">
-                        <Trophy size={110} strokeWidth={1.5} className="text-zinc-200" />
+                    <div key={p.fullName} className={`bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.03]`}>
+                      <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none -rotate-12">
+                        <Trophy size={110} strokeWidth={1} className="text-white" />
                       </div>
                       
                       <div className="flex items-center gap-5 relative z-10 min-w-0 flex-1">
-                        <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border border-white/10 bg-black/40 transition-all duration-500`}>
+                        <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border border-white/10 bg-black/60 transition-all duration-500`}>
                           {i === 0 ? <Trophy className={`w-6 h-6 ${style.iconColor} ${style.shadow}`} /> : <Award className={`w-5 h-5 ${style.iconColor}`} />}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className={`text-[8px] font-black uppercase tracking-[0.2em] mb-0.5 text-white/40`}>Rank #0{i+1}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-[0.2em] mb-0.5 text-white/70`}>Rank #0{i+1}</p>
                           <InstantTooltip text={p.fullName}>
                             <h4 className="text-[13px] font-bold text-white uppercase tracking-tight truncate cursor-help block">{p.name}</h4>
                           </InstantTooltip>
@@ -610,7 +610,7 @@ export default function App() {
                       </div>
                       <div className="text-right relative z-10 shrink-0 ml-4">
                         <div className={`font-bold tabular-nums tracking-tighter text-base leading-none mb-1 text-white`}>{fmt(p.value).replace('$', '')}</div>
-                        <p className="text-[9px] font-bold text-white/40 uppercase tracking-tighter leading-none">{p.count} OPERACIONES</p>
+                        <p className="text-[9px] font-bold text-white/60 uppercase tracking-tighter leading-none">{p.count} OPERACIONES</p>
                       </div>
                     </div>
                   );
@@ -621,8 +621,8 @@ export default function App() {
             {/* Performance de Equipo (Ranking de Asesores) */}
             <div className="bg-[#0a0a0a] border border-white/10 p-12 rounded-[3rem]">
               <div className="flex items-center justify-between mb-12">
-                <div className="space-y-1"><h3 className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Performance de Equipo</h3><p className="text-xl font-bold text-white">Ranking de Asesores</p></div>
-                <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 text-[10px] font-bold text-white/60 uppercase tracking-widest"><User className="w-4 h-4 text-[#d4ff00]" /> {audit.sellers.length} AGENTES</div>
+                <div className="space-y-1"><h3 className="text-xs font-black uppercase tracking-[0.4em] text-white/70">Performance de Equipo</h3><p className="text-xl font-bold text-white">Ranking de Asesores</p></div>
+                <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 text-[10px] font-bold text-white/80 uppercase tracking-widest"><User className="w-4 h-4 text-[#d4ff00]/80" /> {audit.sellers.length} AGENTES</div>
               </div>
               <div className="grid grid-cols-1 gap-3">
                 {audit.sellers.map((s, i) => {
@@ -630,17 +630,17 @@ export default function App() {
                   const style = getRankingStyle(i);
                   
                   return (
-                    <div key={s.name} className={`flex items-center justify-between group p-6 rounded-2xl border border-white/10 bg-[#0a0a0a] hover:bg-white/[0.03] transition-all relative overflow-hidden`}>
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none -rotate-[15deg] transform origin-center">
-                         <Trophy size={100} strokeWidth={1} className="text-zinc-200" />
+                    <div key={s.name} className={`flex items-center justify-between group p-6 rounded-2xl border border-white/10 bg-[#0a0a0a] hover:bg-white/[0.04] transition-all relative overflow-hidden`}>
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-5 group-hover:opacity-15 transition-opacity pointer-events-none -rotate-[15deg] transform origin-center">
+                         <Trophy size={100} strokeWidth={1} className="text-white" />
                       </div>
                       
                       <div className="flex items-center gap-6 w-1/4 relative z-10 min-w-0">
-                        <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border border-white/10 transition-all bg-black/40 ${i < 3 ? style.color + " " + style.shadow : "text-white/40"}`}>
+                        <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border border-white/10 transition-all bg-black/60 ${i < 3 ? style.color + " " + style.shadow : "text-white/60"}`}>
                           {i + 1}
                         </div>
                         <InstantTooltip text={s.name}>
-                          <span className="text-sm font-bold text-white/70 group-hover:text-white uppercase truncate block cursor-help">{s.name}</span>
+                          <span className="text-sm font-bold text-white/80 group-hover:text-white uppercase truncate block cursor-help">{s.name}</span>
                         </InstantTooltip>
                       </div>
                       
@@ -649,16 +649,15 @@ export default function App() {
                           <UserTrend data={s.trend} color={i < 3 ? LIME_NEON : "#555"} />
                         </div>
                         <div className="flex flex-col items-end min-w-[70px] shrink-0">
-                          <span className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">Share</span>
-                          <span className="font-black text-[15px] tabular-nums text-[#d4ff00]/60 transition-colors group-hover:text-[#d4ff00]/80">
+                          <span className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-0.5">Share</span>
+                          <span className="font-black text-[15px] tabular-nums text-[#d4ff00]/70 transition-colors group-hover:text-[#d4ff00]">
                             {sharePercent}%
                           </span>
                         </div>
                       </div>
                       
                       <div className="text-right w-1/4 relative z-10 shrink-0">
-                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">{s.count} VENTAS</p>
-                        {/* El monto cambia a blanco del top 4 (índice 3) para abajo */}
+                        <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-0.5">{s.count} VENTAS</p>
                         <p className={`text-[19px] font-bold tabular-nums ${i < 3 ? 'text-[#d4ff00]' : 'text-white'}`}>
                           {fmt(s.val)}
                         </p>
@@ -671,7 +670,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <footer className="mt-20 py-10 text-center border-t border-white/10 bg-black/50"><p className="text-[10px] font-black text-white/40 uppercase tracking-[0.5em]">Arjaus Management System • 2026</p></footer>
+      <footer className="mt-20 py-10 text-center border-t border-white/10 bg-black/50"><p className="text-[10px] font-black text-white/60 uppercase tracking-[0.5em]">Management System • 2026</p></footer>
     </div>
   );
 }
