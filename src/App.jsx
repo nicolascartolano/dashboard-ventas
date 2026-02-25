@@ -107,23 +107,13 @@ const GlowCard = ({ children, className = "" }) => {
   );
 };
 
-const UserTrend = ({ data, color = LIME_NEON }) => (
-  <div className="h-6 w-full">
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
-        <Line type="monotone" dataKey="val" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-);
-
 const PortfolioCenterIcon = () => (
   <div className="flex flex-col items-center justify-center opacity-60">
     <div className="relative">
       <Package size={42} strokeWidth={1} className="text-[#d4ff00] animate-pulse" />
       <div className="absolute inset-0 blur-lg bg-[#d4ff00]/20 -z-10"></div>
     </div>
-    <span className="text-[7px] font-black uppercase tracking-[0.3em] mt-2 text-white/70">Core Inventory</span>
+    <span className="text-[7px] font-black uppercase tracking-[0.3em] mt-2 text-white/70">Core</span>
   </div>
 );
 
@@ -202,6 +192,29 @@ const abbreviateName = (name) => {
   return clean.toUpperCase();
 };
 
+const getSellerRankingStyle = (index) => {
+  if (index === 0) return {
+      cardBorder: "border-[#d4ff00]/30 shadow-[0_0_20px_rgba(212,255,0,0.05)]",
+      badgeBg: "bg-gradient-to-br from-[#d4ff00] to-[#b8df00]",
+      badgeText: "text-black",
+  };
+  if (index === 1) return {
+      cardBorder: "border-[#d4ff00]/15",
+      badgeBg: "bg-gradient-to-br from-[#b8df00] to-[#8ca900]",
+      badgeText: "text-black",
+  };
+  if (index === 2) return {
+      cardBorder: "border-[#d4ff00]/5",
+      badgeBg: "bg-gradient-to-br from-[#8ca900] to-[#5c7a00]",
+      badgeText: "text-black",
+  };
+  return {
+      cardBorder: "border-white/5",
+      badgeBg: "bg-[#1a1a1a] border border-white/10",
+      badgeText: "text-white",
+  };
+};
+
 // --- APP PRINCIPAL ---
 
 export default function App() {
@@ -224,6 +237,8 @@ export default function App() {
         const processed = raw.map(row => {
           let dStr = row['Fecha Ingreso'] || row['fecha_ingreso'] || '';
           let aStr = row['Cuota Actual'] || row['cuota_actual'] || '0';
+          let mStr = row['Matricula'] || row['matrícula'] || row['Matrícula'] || '0';
+          
           let seller = row['Cargado por'] || row['cargado_por'] || 'Sitio Web';
           let estado = row['Estado'] || row['estado'] || '';
           if (!seller || seller === '0' || seller.trim() === '') seller = 'Sitio Web';
@@ -233,12 +248,19 @@ export default function App() {
           if (p.length === 3) {
             dateObj = p[0].length === 4 ? new Date(p[0], p[1]-1, p[2]) : new Date(p[2], p[1]-1, p[0]);
           }
+          
+          const amount = parseFloat(aStr.replace(/[^0-9.-]/g, '')) || 0;
+          const matricula = parseFloat(mStr.replace(/[^0-9.-]/g, '')) || 0;
+          const total = amount + matricula;
+
           return {
             ...row,
             date: dateObj,
-            amount: parseFloat(aStr.replace(/[^0-9.]/g, '')) || 0,
+            amount,
+            matricula,
+            total,
             seller,
-            estado,
+            estado: estado.toUpperCase(),
             productName: row['Producto'] || 'Sin Nombre',
           };
         }).filter(i => i.date && !isNaN(i.date.getTime()));
@@ -259,17 +281,31 @@ export default function App() {
 
   const audit = useMemo(() => {
     if (rawData.length === 0) return null;
-    const totalRevenue = rawData.reduce((s, i) => s + i.amount, 0);
+    
+    const totalRevenue = rawData.reduce((s, i) => s + i.total, 0);
     const guaranteedCount = rawData.filter(item => item.estado?.toUpperCase().includes('GARANTIZADO')).length;
+    
+    let facturacionGarantizada = 0;
+    let facturacionPorGarantizar = 0;
+
+    rawData.forEach(c => {
+        if (c.estado.includes('GARANTIZADO')) {
+            facturacionGarantizada += c.total;
+        } else {
+            facturacionPorGarantizar += c.total;
+        }
+    });
+
     const timelineMap = rawData.reduce((acc, c) => {
       const k = c.date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
       if(!acc[k]) acc[k] = { name: k, val: 0, count: 0, date: c.date };
-      acc[k].val += c.amount;
+      acc[k].val += c.total;
       acc[k].count++;
       return acc;
     }, {});
     const timelineData = Object.values(timelineMap).sort((a,b) => a.date - b.date);
     const maxDate = new Date(Math.max(...rawData.map(d => d.date)));
+    
     const activityTimeline = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(maxDate);
@@ -279,33 +315,105 @@ export default function App() {
       const dayData = rawData.filter(item => 
         item.date.getDate() === d.getDate() && item.date.getMonth() === d.getMonth() && item.date.getFullYear() === d.getFullYear()
       );
-      const total = dayData.reduce((sum, curr) => sum + curr.amount, 0);
+      const total = dayData.reduce((sum, curr) => sum + curr.total, 0);
       activityTimeline.push({ name: dateKey, label: fullDateLabel, total: total, count: dayData.length, isZero: total === 0 });
     }
     const maxActivityVal = Math.max(...activityTimeline.map(a => a.total)) || 1;
+    
+    const uniqueRawSellers = [...new Set(rawData.map(r => r.seller))];
+    const sellerNameMap = {};
+    const knownSellers = [];
+
+    uniqueRawSellers.forEach(rawSeller => {
+      const cleanRaw = (rawSeller || '').trim();
+      if (!cleanRaw || cleanRaw === '0' || cleanRaw.toLowerCase() === 'sitio web') {
+        sellerNameMap[rawSeller] = 'Sitio Web';
+        return;
+      }
+
+      let foundMatch = false;
+      for (let known of knownSellers) {
+        const n1 = cleanRaw.toLowerCase().split(/\s+/);
+        const n2 = known.raw.toLowerCase().split(/\s+/);
+        const sharedWords = n1.filter(w => n2.includes(w) && w.length > 2);
+        if (sharedWords.length > 0) {
+          const nonShared1 = n1.filter(w => !n2.includes(w));
+          const nonShared2 = n2.filter(w => !n1.includes(w));
+          let isPrefix = false;
+          if (nonShared1.length === 1 && nonShared2.length === 1) {
+            if (nonShared1[0].startsWith(nonShared2[0]) || nonShared2[0].startsWith(nonShared1[0])) isPrefix = true;
+          }
+          const isSubset = nonShared1.length === 0 || nonShared2.length === 0;
+          const isApud = cleanRaw.toLowerCase().includes('apud') && known.raw.toLowerCase().includes('apud');
+          if (isPrefix || isSubset || isApud) {
+            foundMatch = true;
+            if (cleanRaw.length > known.display.length) {
+              known.display = cleanRaw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+            }
+            sellerNameMap[rawSeller] = known;
+            break;
+          }
+        }
+      }
+      if (!foundMatch) {
+        const display = cleanRaw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        const newKnown = { raw: cleanRaw, display };
+        knownSellers.push(newKnown);
+        sellerNameMap[rawSeller] = newKnown;
+      }
+    });
+
+    Object.keys(sellerNameMap).forEach(k => {
+      if (typeof sellerNameMap[k] === 'object') sellerNameMap[k] = sellerNameMap[k].display;
+    });
+
     const sellersMap = rawData.reduce((acc, c) => {
-      if(!acc[c.seller]) acc[c.seller] = { name: c.seller, val: 0, count: 0, daily: {} };
-      acc[c.seller].val += c.amount;
-      acc[c.seller].count++;
-      const dateKey = c.date.toDateString();
-      acc[c.seller].daily[dateKey] = (acc[c.seller].daily[dateKey] || 0) + c.amount;
+      const unifiedName = sellerNameMap[c.seller] || 'Sitio Web';
+      if(!acc[unifiedName]) acc[unifiedName] = { 
+        name: unifiedName, val: 0, count: 0, daily: {}, countDaily: {},
+        garantizadas: 0, facturacionGarantizada: 0
+      };
+      acc[unifiedName].val += c.total;
+      acc[unifiedName].count++;
+      if (c.estado.includes('GARANTIZADO')) {
+          acc[unifiedName].garantizadas++;
+          acc[unifiedName].facturacionGarantizada += c.total;
+      }
+      const dStr = c.date.toISOString().split('T')[0];
+      acc[unifiedName].daily[dStr] = (acc[unifiedName].daily[dStr] || 0) + c.total;
+      acc[unifiedName].countDaily[dStr] = (acc[unifiedName].countDaily[dStr] || 0) + 1;
       return acc;
     }, {});
-    const sellers = Object.values(sellersMap).map(s => ({
-      ...s,
-      trend: Object.entries(s.daily).map(([d, val]) => ({ d, val })).sort((a,b) => new Date(a.d) - new Date(b.d))
-    })).sort((a,b) => b.val - a.val);
+
+    const sellers = Object.values(sellersMap).map(s => {
+      const trendRaw = Object.entries(s.daily).map(([d, val]) => ({
+          date: new Date(d + 'T12:00:00'),
+          val,
+          count: s.countDaily[d]
+      })).sort((a,b) => a.date - b.date);
+      const trend = trendRaw.map(t => ({
+          name: t.date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }),
+          val: t.val,
+          count: t.count
+      }));
+      const uniqueDays = trend.length || 1;
+      return { ...s, trend, promDia: s.val / uniqueDays };
+    }).sort((a,b) => b.val - a.val);
+
     const productsMap = rawData.reduce((acc, c) => {
       const full = c.productName;
       if(!acc[full]) acc[full] = { fullName: full, name: abbreviateName(full), value: 0, count: 0 };
-      acc[full].value += c.amount;
+      acc[full].value += c.total;
       acc[full].count++;
       return acc;
     }, {});
     const productsAll = Object.values(productsMap).sort((a,b) => b.value - a.value);
-    const top3Products = productsAll.slice(0, 3);
-    const productsPie = productsAll.slice(0, 5);
-    return { totalRevenue, totalCount: rawData.length, guaranteedCount, timelineData, activityTimeline, maxActivityVal, sellers, top3Products, productsPie, productsAll };
+    
+    return { 
+      totalRevenue, totalCount: rawData.length, guaranteedCount, timelineData, activityTimeline, 
+      maxActivityVal, sellers, top3Products: productsAll.slice(0, 3), productsPie: productsAll.slice(0, 5), productsAll,
+      facturacionGarantizada, facturacionPorGarantizar
+    };
   }, [rawData]);
 
   const fmt = (v) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(v);
@@ -316,10 +424,10 @@ export default function App() {
       const data = payload[0].payload;
       return (
         <div className="bg-zinc-900 border border-white/30 p-3 rounded shadow-2xl backdrop-blur-md">
-          <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">{data.label}</p>
+          <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">{data.label || data.name}</p>
           <div className="flex items-center justify-between gap-4">
             <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">Monto:</span>
-            <span className="text-white font-black">{fmt(data.total)}</span>
+            <span className="text-white font-black">{fmt(data.total || data.val)}</span>
           </div>
           <div className="flex items-center justify-between gap-4">
             <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">Ventas:</span>
@@ -353,27 +461,11 @@ export default function App() {
     return null;
   };
 
-  const getRankingStyle = (index) => {
-    if (index === 0) return { 
-      color: "text-[#d4ff00]", 
-      shadow: "drop-shadow-[0_0_8px_rgba(212,255,0,0.5)]", 
-      iconColor: "text-[#d4ff00]"
-    };
-    if (index === 1) return { 
-      color: "text-[#d4ff00]/80", 
-      shadow: "drop-shadow-[0_0_4px_rgba(212,255,0,0.2)]", 
-      iconColor: "text-[#d4ff00]/80"
-    };
-    if (index === 2) return { 
-      color: "text-[#d4ff00]/60", 
-      shadow: "", 
-      iconColor: "text-[#d4ff00]/60"
-    };
-    return { 
-      color: "text-white/70", 
-      shadow: "", 
-      iconColor: "text-white/70"
-    };
+  const getProductRankingStyle = (index) => {
+    if (index === 0) return { color: "text-[#d4ff00]", shadow: "drop-shadow-[0_0_8px_rgba(212,255,0,0.5)]", iconColor: "text-[#d4ff00]" };
+    if (index === 1) return { color: "text-[#d4ff00]/80", shadow: "drop-shadow-[0_0_4px_rgba(212,255,0,0.2)]", iconColor: "text-[#d4ff00]/80" };
+    if (index === 2) return { color: "text-[#d4ff00]/60", shadow: "", iconColor: "text-[#d4ff00]/60" };
+    return { color: "text-white/70", shadow: "", iconColor: "text-white/70" };
   };
 
   return (
@@ -431,7 +523,7 @@ export default function App() {
                     <span className="text-xl font-bold text-[#d4ff00] opacity-80">$</span>
                     <AnimatedNumber value={audit.totalRevenue} />
                   </div>
-                  <p className="text-[9px] text-white/60 mt-1 font-bold tracking-widest uppercase">BASADO EN {audit.totalCount} VENTAS</p>
+                  <p className="text-[9px] text-white/40 mt-1 font-bold tracking-widest uppercase">{audit.totalCount} VENTAS</p>
                 </div>
               </GlowCard>
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52">
@@ -439,7 +531,7 @@ export default function App() {
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">TICKET PROMEDIO</p>
                   <AnimatedNumber value={audit.totalRevenue / audit.totalCount} />
-                  <p className="text-[9px] text-white/60 mt-1 font-bold tracking-widest uppercase">VALOR POR OPERACIÓN</p>
+                  <p className="text-[9px] text-white/40 mt-1 font-bold tracking-widest uppercase">VALOR POR OPERACIÓN</p>
                 </div>
               </GlowCard>
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52 relative">
@@ -450,7 +542,7 @@ export default function App() {
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">INSCRIPCIONES TOTALES</p>
                   <h2 className="text-5xl font-bold tracking-tight">{audit.totalCount}</h2>
-                  <p className="text-[9px] text-white/60 mt-1 font-bold tracking-widest uppercase">REGISTROS PROCESADOS</p>
+                  <p className="text-[9px] text-white/40 mt-1 font-bold tracking-widest uppercase">REGISTROS PROCESADOS</p>
                 </div>
               </GlowCard>
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52">
@@ -469,6 +561,38 @@ export default function App() {
                   <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden"><div className="bg-[#d4ff00] h-full rounded-full shadow-[0_0_10px_#d4ff00] transition-all duration-1000" style={{ width: `${Math.min((audit.totalRevenue / targetBimestral) * 100, 100)}%` }}></div></div>
                 </div>
               </GlowCard>
+            </div>
+
+            {/* SECCIÓN: Estado de Facturación Garantizada */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
+                    <div className="flex justify-between items-start">
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">FACTURACIÓN GARANTIZADA</p>
+                        <span className="text-2xl font-bold text-[#d4ff00] tracking-tighter">{((audit.facturacionGarantizada / audit.totalRevenue) * 100).toFixed(1)}%</span>
+                    </div>
+                    <div>
+                        <div className="text-4xl font-bold text-[#d4ff00] tracking-tighter mb-2">{fmt(audit.facturacionGarantizada)}</div>
+                        <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
+                            <div className="bg-[#d4ff00] h-full shadow-[0_0_10px_#d4ff00] transition-all" style={{width: `${(audit.facturacionGarantizada / audit.totalRevenue) * 100}%`}}></div>
+                        </div>
+                        <p className="text-[9px] text-white/40 mt-3 font-bold tracking-widest uppercase">INGRESOS ASEGURADOS</p>
+                    </div>
+                </GlowCard>
+                <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
+                    <div className="flex justify-between items-start">
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">FACTURACIÓN POR GARANTIZAR</p>
+                        <span className="text-2xl font-bold text-white/40 tracking-tighter">{((audit.facturacionPorGarantizar / audit.totalRevenue) * 100).toFixed(1)}%</span>
+                    </div>
+                    <div>
+                        <div className="text-4xl font-bold text-white tracking-tighter mb-2">{fmt(audit.facturacionPorGarantizar)}</div>
+                        <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
+                            <div className="bg-white/40 h-full transition-all" style={{width: `${(audit.facturacionPorGarantizar / audit.totalRevenue) * 100}%`}}></div>
+                        </div>
+                        <div className="flex justify-between items-center mt-3">
+                            <p className="text-[9px] text-white/40 font-bold tracking-widest uppercase">EN PROCESO</p>
+                        </div>
+                    </div>
+                </GlowCard>
             </div>
 
             {/* Actividad Diaria */}
@@ -499,7 +623,7 @@ export default function App() {
                   <div className="w-16 h-16 bg-[#d4ff00]/5 rounded-2xl flex items-center justify-center mx-auto mb-6"><BarChart3 className="w-8 h-8 text-[#d4ff00]" /></div>
                   <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.4em] mb-2">PROM. DIARIO (PERIODO)</p>
                   <div className="text-4xl font-bold tracking-tighter mb-2">{fmt(audit.activityTimeline.reduce((s, a) => s + a.total, 0) / 30)}</div>
-                  <p className="text-[9px] text-white/60 font-bold uppercase tracking-widest">Cálculo ultimos 30 días </p>
+                  <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest">Cálculo ultimos 30 días </p>
                </div>
             </div>
 
@@ -590,27 +714,25 @@ export default function App() {
               {/* Top 3 List (Productos) */}
               <div className="lg:col-span-5 grid grid-cols-1 gap-4">
                 {audit.top3Products.map((p, i) => {
-                  const style = getRankingStyle(i);
+                  const style = getProductRankingStyle(i);
                   return (
                     <div key={p.fullName} className={`bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.03]`}>
-                      <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none -rotate-12">
-                        <Trophy size={110} strokeWidth={1} className="text-white" />
+                      {/* ✅ ÚNICO CAMBIO: copa decorativa a la derecha (igual a tu referencia) */}
+                      <div className="absolute -right-4 -bottom-4 opacity-15 group-hover:opacity-25 transition-opacity pointer-events-none -rotate-12">
+                        <Trophy size={110} strokeWidth={1.5} className="text-zinc-200" />
                       </div>
-                      
+
                       <div className="flex items-center gap-5 relative z-10 min-w-0 flex-1">
                         <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border border-white/10 bg-black/60 transition-all duration-500`}>
-                          {i === 0 ? <Trophy className={`w-6 h-6 ${style.iconColor} ${style.shadow}`} /> : <Award className={`w-5 h-5 ${style.iconColor}`} />}
+                          {i === 0 ? <Trophy className={style.iconColor} size={24} /> : i === 1 ? <Award className={style.iconColor} size={24} /> : <Target className={style.iconColor} size={24} />}
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-[8px] font-black uppercase tracking-[0.2em] mb-0.5 text-white/70`}>Rank #0{i+1}</p>
-                          <InstantTooltip text={p.fullName}>
-                            <h4 className="text-[13px] font-bold text-white uppercase tracking-tight truncate cursor-help block">{p.name}</h4>
-                          </InstantTooltip>
+                        <div className="flex flex-col">
+                          <span className={`text-[12px] font-black uppercase tracking-wider ${style.color} ${style.shadow} truncate max-w-[150px]`}>{p.name}</span>
+                          <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{p.count} VENTAS</span>
                         </div>
                       </div>
-                      <div className="text-right relative z-10 shrink-0 ml-4">
-                        <div className={`font-bold tabular-nums tracking-tighter text-base leading-none mb-1 text-white`}>{fmt(p.value).replace('$', '')}</div>
-                        <p className="text-[9px] font-bold text-white/60 uppercase tracking-tighter leading-none">{p.count} OPERACIONES</p>
+                      <div className="text-right z-10">
+                        <div className="text-xl font-black text-white tracking-tighter">{fmt(p.value)}</div>
                       </div>
                     </div>
                   );
@@ -618,49 +740,56 @@ export default function App() {
               </div>
             </div>
 
-            {/* Performance de Equipo (Ranking de Asesores) */}
-            <div className="bg-[#0a0a0a] border border-white/10 p-12 rounded-[3rem]">
-              <div className="flex items-center justify-between mb-12">
-                <div className="space-y-1"><h3 className="text-xs font-black uppercase tracking-[0.4em] text-white/70">Performance de Equipo</h3><p className="text-xl font-bold text-white">Ranking de Asesores</p></div>
-                <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 text-[10px] font-bold text-white/80 uppercase tracking-widest"><User className="w-4 h-4 text-[#d4ff00]/80" /> {audit.sellers.length} AGENTES</div>
+            {/* SECCIÓN: Rendimiento por Vendedor (Ranking Inteligente) */}
+            <div className="mt-10 pt-10 border-t border-white/10">
+              <div className="flex items-center gap-2 mb-8">
+                <User className="w-5 h-5 text-[#d4ff00]" />
+                <h3 className="text-2xl font-bold text-white uppercase tracking-tighter">Ranking de Asesores</h3>
               </div>
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {audit.sellers.map((s, i) => {
-                  const sharePercent = ((s.val / audit.totalRevenue) * 100).toFixed(1);
-                  const style = getRankingStyle(i);
-                  
+                  const style = getSellerRankingStyle(i);
                   return (
-                    <div key={s.name} className={`flex items-center justify-between group p-6 rounded-2xl border border-white/10 bg-[#0a0a0a] hover:bg-white/[0.04] transition-all relative overflow-hidden`}>
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-5 group-hover:opacity-15 transition-opacity pointer-events-none -rotate-[15deg] transform origin-center">
-                         <Trophy size={100} strokeWidth={1} className="text-white" />
+                    <div key={s.name} className={`group bg-[#0a0a0a] border ${style.cardBorder} rounded-[2rem] p-6 relative overflow-hidden transition-all duration-300 hover:scale-[1.01]`}>
+                      <div className="absolute bottom-[-20px] right-[-20px] opacity-[0.05] group-hover:opacity-[0.12] transition-all duration-700 pointer-events-none -rotate-12">
+                        <Trophy size={180} strokeWidth={1} className="text-white" />
                       </div>
-                      
-                      <div className="flex items-center gap-6 w-1/4 relative z-10 min-w-0">
-                        <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border border-white/10 transition-all bg-black/60 ${i < 3 ? style.color + " " + style.shadow : "text-white/60"}`}>
-                          {i + 1}
+                      <div className="flex items-center justify-between mb-4 relative z-10">
+                        <div className="flex items-center gap-3">
+                           <span className={`${style.badgeBg} ${style.badgeText} w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm`}>{i + 1}</span>
+                           <h4 className="text-sm font-black uppercase truncate max-w-[180px] text-white">{s.name}</h4>
                         </div>
-                        <InstantTooltip text={s.name}>
-                          <span className="text-sm font-bold text-white/80 group-hover:text-white uppercase truncate block cursor-help">{s.name}</span>
-                        </InstantTooltip>
-                      </div>
-                      
-                      <div className="flex-1 flex items-center gap-12 px-10 hidden md:flex relative z-10">
-                        <div className="flex-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                          <UserTrend data={s.trend} color={i < 3 ? LIME_NEON : "#555"} />
-                        </div>
-                        <div className="flex flex-col items-end min-w-[70px] shrink-0">
-                          <span className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-0.5">Share</span>
-                          <span className="font-black text-[15px] tabular-nums text-[#d4ff00]/70 transition-colors group-hover:text-[#d4ff00]">
-                            {sharePercent}%
-                          </span>
+                        <div className="text-right">
+                           <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest mb-0.5">{s.count} VENTAS</p>
+                           <span className="text-2xl font-black text-[#d4ff00] tracking-tighter">{fmt(s.val)}</span>
                         </div>
                       </div>
-                      
-                      <div className="text-right w-1/4 relative z-10 shrink-0">
-                        <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-0.5">{s.count} VENTAS</p>
-                        <p className={`text-[19px] font-bold tabular-nums ${i < 3 ? 'text-[#d4ff00]' : 'text-white'}`}>
-                          {fmt(s.val)}
-                        </p>
+                      <div className="grid grid-cols-2 gap-3 mb-6 relative z-10">
+                          <div className="bg-black/60 rounded-xl p-3 border border-white/5 backdrop-blur-sm">
+                              <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-1">Promedio Diario</p>
+                              <p className="text-sm font-bold text-white tracking-tight">{fmt(s.promDia)}</p>
+                          </div>
+                          <div className="bg-black/60 rounded-xl p-3 border border-white/5 backdrop-blur-sm">
+                              <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-1">Garantizado ({s.garantizadas} est.)</p>
+                              <p className="text-sm font-bold text-[#d4ff00] tracking-tight">{fmt(s.facturacionGarantizada)}</p>
+                          </div>
+                      </div>
+                      <div className="relative z-10">
+                        <p className="text-[8px] text-white/40 uppercase tracking-widest font-bold mb-2 text-center">Evolución de ventas (Picos de facturación)</p>
+                        <div className="h-[140px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={s.trend}>
+                                <defs>
+                                    <linearGradient id={`colorS-${i}`} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.5}/><stop offset="95%" stopColor={LIME_NEON} stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#888', fontSize: 9}} minTickGap={15} />
+                                <Tooltip content={<CustomActivityTooltip />} cursor={{fill: 'rgba(212, 255, 0, 0.05)'}} />
+                                <Area type="monotone" dataKey="val" stroke={LIME_NEON} fillOpacity={1} fill={`url(#colorS-${i})`} strokeWidth={2} isAnimationActive={false} />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
                       </div>
                     </div>
                   );
@@ -670,7 +799,6 @@ export default function App() {
           </div>
         )}
       </main>
-      <footer className="mt-20 py-10 text-center border-t border-white/10 bg-black/50"><p className="text-[10px] font-black text-white/60 uppercase tracking-[0.5em]">Management System • 2026</p></footer>
     </div>
   );
 }
