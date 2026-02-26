@@ -14,6 +14,8 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  LineChart,
+  Line,
   PieChart as RechartsPieChart,
   Pie,
   Cell,
@@ -26,6 +28,7 @@ import {
   Database,
   Target,
   User,
+  Users,
   Trophy,
   TrendingUp,
   Zap,
@@ -43,11 +46,13 @@ import {
 const LIME_NEON = '#d4ff00';
 const LIME_MID = '#b8df00';
 const LIME_DARK = '#8ca900';
+
 const BG_PURE_BLACK = 'bg-black';
 const CARD_DARK = 'bg-[#0a0a0a]';
 
 const COLORS = [LIME_NEON, '#ffffff', '#e5e5e5', '#a3a3a3', '#737373'];
-const DEFAULT_LOGO_URL = 'https://arjaus.com/img/isologotipo-blanco%20izquierda.svg';
+const DEFAULT_LOGO_URL =
+  'https://arjaus.com/img/isologotipo-blanco%20izquierda.svg';
 
 // --- HARDENING ---
 const MAX_FILE_MB = 20;
@@ -60,9 +65,19 @@ const fmtCurrency = new Intl.NumberFormat('es-AR', {
 });
 const fmtNumberAR = new Intl.NumberFormat('es-AR');
 
-const fmtDayShort = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short' });
-const fmtDayKeyDDMM = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit' });
-const fmtFullDayLabel = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+const fmtDayShort = new Intl.DateTimeFormat('es-AR', {
+  day: '2-digit',
+  month: 'short',
+});
+const fmtDayKeyDDMM = new Intl.DateTimeFormat('es-AR', {
+  day: '2-digit',
+  month: '2-digit',
+});
+const fmtFullDayLabel = new Intl.DateTimeFormat('es-AR', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
 
 // --- HELPERS (fechas y keys consistentes sin UTC) ---
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -76,6 +91,22 @@ const toDayKeyLocal = (d) => {
 
 const safeUpper = (v) => String(v || '').toUpperCase();
 
+// normaliza mail
+const normalizeEmail = (v) => {
+  const s = String(v || '').trim().toLowerCase();
+  if (!s) return '';
+  // recorta espacios internos raros
+  return s.replace(/\s+/g, '');
+};
+
+// normaliza DNI (solo dígitos)
+const normalizeDNI = (v) => {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  const digits = s.replace(/\D/g, '');
+  return digits;
+};
+
 /**
  * parseMoney robusto AR/US
  * Soporta:
@@ -87,7 +118,6 @@ const parseMoney = (input) => {
   const raw = String(input ?? '').trim();
   if (!raw) return 0;
 
-  // deja dígitos, separadores y signo
   let s = raw.replace(/\s/g, '').replace(/[^0-9,.\-]/g, '');
   if (!s) return 0;
 
@@ -95,29 +125,24 @@ const parseMoney = (input) => {
   const hasDot = s.includes('.');
 
   if (hasComma && hasDot) {
-    // decide decimal por el último separador
     const lastComma = s.lastIndexOf(',');
     const lastDot = s.lastIndexOf('.');
     const decimalIsComma = lastComma > lastDot;
 
     if (decimalIsComma) {
-      // AR: miles con ".", decimal ","
       s = s.replace(/\./g, '').replace(/,/g, '.');
     } else {
-      // US: miles ",", decimal "."
       s = s.replace(/,/g, '');
     }
   } else if (hasComma && !hasDot) {
-    // asume coma decimal
     s = s.replace(/,/g, '.');
   }
-  // else: solo puntos o nada -> parse directo
 
   const n = Number.parseFloat(s);
   return Number.isFinite(n) ? n : 0;
 };
 
-// parsing de fecha robusto (dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd), a mediodía local (evita corrimientos)
+// parsing de fecha robusto (dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd), a mediodía local
 const parseDateLoose = (input) => {
   const raw = String(input || '').trim();
   if (!raw) return null;
@@ -145,7 +170,7 @@ const parseDateLoose = (input) => {
   if (m < 1 || m > 12) return null;
   if (d < 1 || d > 31) return null;
 
-  const dt = new Date(y, m - 1, d, 12, 0, 0); // mediodía local
+  const dt = new Date(y, m - 1, d, 12, 0, 0);
   if (Number.isNaN(dt.getTime())) return null;
   return dt;
 };
@@ -176,7 +201,6 @@ const splitCSVLine = (line, delimiter) => {
     const ch = line[i];
 
     if (ch === '"') {
-      // comilla escapada dentro de string: ""
       if (inQuotes && line[i + 1] === '"') {
         cur += '"';
         i++;
@@ -200,29 +224,39 @@ const splitCSVLine = (line, delimiter) => {
 };
 
 const parseCSV = (text) => {
-  const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim().length);
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .filter((l) => l.trim().length);
   if (lines.length < 2) return [];
 
   const delimiter = detectDelimiter(lines[0]);
-  const headers = splitCSVLine(lines[0], delimiter).map((h) => h.replace(/^"|"$/g, '').trim());
+  const headers = splitCSVLine(lines[0], delimiter).map((h) =>
+    h.replace(/^"|"$/g, '').trim()
+  );
 
   return lines.slice(1).map((line) => {
-    const values = splitCSVLine(line, delimiter).map((v) => v.replace(/^"|"$/g, '').trim());
+    const values = splitCSVLine(line, delimiter).map((v) =>
+      v.replace(/^"|"$/g, '').trim()
+    );
     return headers.reduce((obj, header, i) => {
       obj[header] = values[i] ?? '';
       return obj;
     }, {});
   });
 };
-
 // --- Data contract / schema check (best-effort) ---
 const COL_ALIASES = {
   fecha: ['Fecha Ingreso', 'fecha_ingreso', 'fecha', 'Fecha'],
   monto: ['Cuota Actual', 'cuota_actual', 'cuota', 'Monto', 'monto'],
-  producto: ['Producto', 'producto', 'Curso', 'curso'],
+  producto: ['Producto', 'producto', 'Curso', 'curso', 'Descripción', 'descripcion'],
   matricula: ['Matricula', 'matrícula', 'Matrícula', 'matricula'],
-  seller: ['Cargado por', 'cargado_por', 'Vendedor', 'vendedor'],
+  seller: ['Cargado por', 'cargado_por', 'Vendedor', 'vendedor', 'Asesor', 'asesor'],
   estado: ['Estado', 'estado'],
+  // ✅ para detectar multi-producto
+  dni: ['DNI', 'dni', 'Documento', 'documento', 'Nro Documento', 'Nro documento'],
+  email: ['Email', 'email', 'Correo', 'correo', 'Mail', 'mail'],
+  // opcional: código/camada/cohorte (si existe, mejor key de producto)
+  camada: ['Camada', 'camada', 'Código Camada', 'codigo_camada', 'Cohorte', 'cohorte', 'Cod Camada', 'cod_camada'],
 };
 
 const pickFirst = (row, keys) => {
@@ -263,10 +297,20 @@ const parseAndNormalizeRow = (row, rowIndex) => {
   const matricula = parseMoney(mStr);
   if (!Number.isFinite(matricula)) reasons.push('matrícula inválida');
 
-  const total = (Number.isFinite(amount) ? amount : 0) + (Number.isFinite(matricula) ? matricula : 0);
+  const total =
+    (Number.isFinite(amount) ? amount : 0) +
+    (Number.isFinite(matricula) ? matricula : 0);
 
   const productName = pickFirst(row, COL_ALIASES.producto) || 'Sin Nombre';
   if (!productName || String(productName).trim() === '') reasons.push('producto vacío');
+
+  const camadaRaw = pickFirst(row, COL_ALIASES.camada);
+  const productKey = String(camadaRaw || '').trim() || String(productName || '').trim();
+
+  const dniRaw = pickFirst(row, COL_ALIASES.dni);
+  const emailRaw = pickFirst(row, COL_ALIASES.email);
+  const dni = normalizeDNI(dniRaw);
+  const email = normalizeEmail(emailRaw);
 
   const normalized = {
     ...row,
@@ -277,6 +321,9 @@ const parseAndNormalizeRow = (row, rowIndex) => {
     seller,
     estado: safeUpper(estadoRaw),
     productName,
+    productKey,
+    dni,
+    email,
   };
 
   const isDiscarded = !normalized.date || Number.isNaN(normalized.date.getTime());
@@ -295,28 +342,46 @@ const abbreviateName = (name) => {
 };
 
 const getSellerRankingStyle = (index) => {
-  if (index === 0)
+  const base = {
+    // borde MUY suave (nada blanco fuerte)
+    rowBorder:' ',
+    // número sin fondo
+    rankWrap: 'w-10 h-10 flex items-center justify-center',
+    rankText: 'text-[12px] font-black',
+    // monto
+    amountText: 'text-[22px] font-black tracking-tighter',
+  };
+
+  if (index === 0) {
     return {
-      cardBorder: 'border-[#d4ff00]/30 shadow-[0_0_20px_rgba(212,255,0,0.05)]',
-      badgeBg: 'bg-gradient-to-br from-[#d4ff00] to-[#b8df00]',
-      badgeText: 'text-black',
+      ...base,
+      rowBorder: 'border border-[#d4ff00]/10',
+      rankTextColor: 'text-[#d4ff00]',
+      amountColor: 'text-[#d4ff00]',
     };
-  if (index === 1)
+  }
+  if (index === 1) {
     return {
-      cardBorder: 'border-[#d4ff00]/15',
-      badgeBg: 'bg-gradient-to-br from-[#b8df00] to-[#8ca900]',
-      badgeText: 'text-black',
+      ...base,
+      rowBorder: 'border border-[#d4ff00]/7',
+      rankTextColor: 'text-[#b8df00]',
+      amountColor: 'text-[#b8df00]',
     };
-  if (index === 2)
+  }
+  if (index === 2) {
     return {
-      cardBorder: 'border-[#d4ff00]/5',
-      badgeBg: 'bg-gradient-to-br from-[#8ca900] to-[#5c7a00]',
-      badgeText: 'text-black',
+      ...base,
+      rowBorder: 'border border-[#d4ff00]/5',
+      rankTextColor: 'text-[#8ca900]',
+      amountColor: 'text-[#8ca900]',
     };
+  }
+
   return {
-    cardBorder: 'border-white/5',
-    badgeBg: 'bg-[#1a1a1a] border border-white/10',
-    badgeText: 'text-white',
+    ...base,
+    rowBorder: 'border border-white/4',
+    rankTextColor: 'text-white/70',
+    amountColor: 'text-white',
   };
 };
 
@@ -346,10 +411,12 @@ const InstantTooltip = ({ text, children }) => {
         <div
           id={tooltipId}
           role="tooltip"
-          className="fixed z-[9999] pointer-events-none bg-zinc-900 border border-white/30 px-3 py-2 rounded shadow-2xl backdrop-blur-md animate-in fade-in duration-75"
+          className="fixed z-[9999] pointer-events-none bg-zinc-900 border border-white/20 px-3 py-2 rounded shadow-2xl backdrop-blur-md animate-in fade-in duration-75"
           style={{ top: coords.y, left: coords.x }}
         >
-          <p className="text-[10px] font-bold text-white uppercase tracking-tight whitespace-nowrap">{text}</p>
+          <p className="text-[10px] font-bold text-white uppercase tracking-tight whitespace-nowrap">
+            {text}
+          </p>
         </div>
       )}
     </div>
@@ -392,7 +459,11 @@ const AnimatedNumber = ({ value }) => {
     return 'text-3xl';
   };
 
-  return <span className={`${getFontSize(formatted)} font-bold tracking-tighter transition-all duration-300`}>{formatted}</span>;
+  return (
+    <span className={`${getFontSize(formatted)} font-bold tracking-tighter transition-all duration-300`}>
+      {formatted}
+    </span>
+  );
 };
 
 const GlowCard = ({ children, className = '' }) => {
@@ -410,12 +481,12 @@ const GlowCard = ({ children, className = '' }) => {
     <div
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      className={`relative overflow-hidden group hover:translate-y-[-4px] hover:border-[#d4ff00]/20 transition-all duration-500 border border-white/10 ${className}`}
+      className={`relative overflow-hidden group hover:translate-y-[-4px] hover:border-[#d4ff00]/12 transition-all duration-500 border border-white/5 ${className}`}
     >
       <div
         className="pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-100 transition-opacity duration-500"
         style={{
-          background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(212,255,0,0.08), transparent 40%)`,
+          background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(212,255,0,0.06), transparent 42%)`,
         }}
       />
       {children}
@@ -429,7 +500,9 @@ const PortfolioCenterIcon = () => (
       <Package size={42} strokeWidth={1} className="text-[#d4ff00] animate-pulse" />
       <div className="absolute inset-0 blur-lg bg-[#d4ff00]/20 -z-10"></div>
     </div>
-    <span className="text-[7px] font-black uppercase tracking-[0.3em] mt-2 text-white/70">Core</span>
+    <span className="text-[7px] font-black uppercase tracking-[0.3em] mt-2 text-white/70">
+      Core
+    </span>
   </div>
 );
 
@@ -445,7 +518,16 @@ const makeRenderActiveShape = (glowId) => (props) => {
           <feMergeNode in="SourceGraphic" />
         </feMerge>
       </filter>
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 8} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.3} />
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius + 8}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        opacity={0.28}
+      />
       <Sector
         cx={cx}
         cy={cy}
@@ -468,14 +550,20 @@ const CustomActivityTooltip = ({ active, payload, fmt }) => {
   const data = payload[0].payload;
 
   return (
-    <div className="bg-zinc-900 border border-white/30 p-3 rounded shadow-2xl backdrop-blur-md">
-      <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">{data.label || data.name}</p>
+    <div className="bg-zinc-900 border border-white/20 p-3 rounded shadow-2xl backdrop-blur-md">
+      <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">
+        {data.label || data.name}
+      </p>
       <div className="flex items-center justify-between gap-4">
-        <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">Monto:</span>
+        <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">
+          Monto:
+        </span>
         <span className="text-white font-black">{fmt(data.total ?? data.val ?? 0)}</span>
       </div>
       <div className="flex items-center justify-between gap-4">
-        <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">Ventas:</span>
+        <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">
+          Ventas:
+        </span>
         <span className="text-white font-black">{data.count ?? 0}</span>
       </div>
     </div>
@@ -488,28 +576,37 @@ const CustomPieTooltip = ({ active, payload, fmt, totalRevenue }) => {
   const denom = totalRevenue > 0 ? totalRevenue : 1;
 
   return (
-    <div className="bg-zinc-900 border border-white/30 p-4 rounded shadow-2xl backdrop-blur-xl">
-      <p className="text-[8px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">Producto</p>
-      <p className="text-xs font-bold text-white uppercase leading-tight mb-2 max-w-[200px]">{data.fullName}</p>
-      <div className="h-[1px] bg-white/20 w-full mb-2"></div>
+    <div className="bg-zinc-900 border border-white/20 p-4 rounded shadow-2xl backdrop-blur-xl">
+      <p className="text-[8px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">
+        Producto
+      </p>
+      <p className="text-xs font-bold text-white uppercase leading-tight mb-2 max-w-[200px]">
+        {data.fullName}
+      </p>
+      <div className="h-[1px] bg-white/15 w-full mb-2"></div>
       <div className="flex items-center justify-between gap-6">
         <span className="text-[10px] text-white/80 font-medium">Volumen:</span>
         <span className="text-sm font-black text-white">{fmt(data.value ?? 0)}</span>
       </div>
       <div className="flex items-center justify-between gap-6">
         <span className="text-[10px] text-white/80 font-medium">Participación:</span>
-        <span className="text-xs font-bold text-white">{(((data.value ?? 0) / denom) * 100).toFixed(1)}%</span>
+        <span className="text-xs font-bold text-white">
+          {(((data.value ?? 0) / denom) * 100).toFixed(1)}%
+        </span>
       </div>
     </div>
   );
 };
-
 // --- APP PRINCIPAL ---
 export default function App() {
   const [rawData, setRawData] = useState([]);
-  const [targetBimestral, setTargetBimestral] = useState(120000000);
+  const [targetBimestral, setTargetBimestral] = useState(58000000);
   const [customLogo, setCustomLogo] = useState(DEFAULT_LOGO_URL);
   const [activeIndex, setActiveIndex] = useState(null);
+  const [expandedSeller, setExpandedSeller] = useState(null);
+  const toggleSeller = (name) => {
+  setExpandedSeller((prev) => (prev === name ? null : name));
+};
 
   // banners UI (schema check / errores)
   const [banner, setBanner] = useState(null);
@@ -518,7 +615,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  // rowErrors (se calcula pero NO se muestra en UI; pediste sacar ese bloque)
+  // rowErrors (se calcula pero NO se muestra en UI)
   const [rowErrors, setRowErrors] = useState([]);
   const [discardedCount, setDiscardedCount] = useState(0);
   const [lastSyncAt, setLastSyncAt] = useState(null);
@@ -566,7 +663,10 @@ export default function App() {
   }, [lastSyncAt]);
 
   const glowId = useId();
-  const renderActiveShape = useMemo(() => makeRenderActiveShape(`glow-${glowId.replace(/:/g, '')}`), [glowId]);
+  const renderActiveShape = useMemo(
+    () => makeRenderActiveShape(`glow-${glowId.replace(/:/g, '')}`),
+    [glowId]
+  );
 
   const onPieEnter = (_, index) => setActiveIndex(index);
   const onPieLeave = () => setActiveIndex(null);
@@ -579,7 +679,10 @@ export default function App() {
     e.target.value = '';
 
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      setBanner({ type: 'error', message: `El archivo supera ${MAX_FILE_MB}MB. Reducilo o exportá menos filas.` });
+      setBanner({
+        type: 'error',
+        message: `El archivo supera ${MAX_FILE_MB}MB. Reducilo o exportá menos filas.`,
+      });
       return;
     }
 
@@ -598,7 +701,9 @@ export default function App() {
         if (missing.length) {
           setBanner({
             type: 'warn',
-            message: `Faltan columnas críticas (${missing.join(', ')}). Proceso igual (best-effort), puede haber filas descartadas.`,
+            message: `Faltan columnas críticas (${missing.join(
+              ', '
+            )}). Proceso igual (best-effort), puede haber filas descartadas.`,
           });
         }
 
@@ -606,7 +711,8 @@ export default function App() {
         const processed = [];
 
         for (let i = 0; i < raw.length; i++) {
-          const { normalized, reasons, isDiscarded, rowIndex } = parseAndNormalizeRow(raw[i], i + 2);
+          const { normalized, reasons, isDiscarded, rowIndex } =
+            parseAndNormalizeRow(raw[i], i + 2);
           if (reasons.length) errors.push({ rowIndex, reasons });
           if (!isDiscarded) processed.push(normalized);
         }
@@ -620,7 +726,10 @@ export default function App() {
           setLastSyncAt(new Date().toISOString());
         });
       } catch {
-        setBanner({ type: 'error', message: 'Error al procesar el CSV. Verificá formato/encoding.' });
+        setBanner({
+          type: 'error',
+          message: 'Error al procesar el CSV. Verificá formato/encoding.',
+        });
       } finally {
         setLoading(false);
       }
@@ -677,6 +786,9 @@ export default function App() {
     const productsMap = {};
     const uniqueRawSellersSet = new Set();
 
+    // ✅ multi-producto: personKey -> Set(productKey)
+    const personProducts = new Map();
+
     for (const c of rawData) {
       totalRevenue += c.total;
 
@@ -703,9 +815,23 @@ export default function App() {
       productsMap[full].count += 1;
 
       uniqueRawSellersSet.add(c.seller);
+
+      // ✅ personKey prefer DNI, fallback email (email puede tener errores, pero sirve de backup)
+      const personKey = c.dni ? `dni:${c.dni}` : c.email ? `email:${c.email}` : '';
+      if (personKey) {
+        if (!personProducts.has(personKey)) personProducts.set(personKey, new Set());
+        personProducts.get(personKey).add(String(c.productKey || c.productName || '').trim());
+      }
     }
 
     const uniqueRawSellers = Array.from(uniqueRawSellersSet);
+
+    // ✅ stats multi-producto
+    let uniqueCustomersCount = personProducts.size;
+    let multiProductCustomers = 0;
+    for (const set of personProducts.values()) {
+      if (set.size >= 2) multiProductCustomers += 1;
+    }
 
     return {
       totalRevenue,
@@ -717,6 +843,8 @@ export default function App() {
       activityByDayKey,
       productsMap,
       uniqueRawSellers,
+      uniqueCustomersCount,
+      multiProductCustomers,
     };
   }, [rawData]);
 
@@ -846,6 +974,8 @@ export default function App() {
       timelineByDayKey,
       activityByDayKey,
       productsMap,
+      uniqueCustomersCount,
+      multiProductCustomers,
     } = baseAgg;
 
     const timelineData = Object.entries(timelineByDayKey)
@@ -907,27 +1037,29 @@ export default function App() {
       facturacionPorGarantizar,
       promDiarioPeriodo,
       activeDays,
+      // ✅ multi-producto
+      uniqueCustomersCount,
+      multiProductCustomers,
     };
   }, [baseAgg, rawData, sellersComputed]);
 
   const fmt = (v) => fmtCurrency.format(v);
 
   const getProductRankingStyle = (index) => {
-    if (index === 0) return { color: 'text-[#d4ff00]', shadow: 'drop-shadow-[0_0_8px_rgba(212,255,0,0.5)]', iconColor: 'text-[#d4ff00]' };
-    if (index === 1) return { color: 'text-[#d4ff00]/80', shadow: 'drop-shadow-[0_0_4px_rgba(212,255,0,0.2)]', iconColor: 'text-[#d4ff00]/80' };
-    if (index === 2) return { color: 'text-[#d4ff00]/60', shadow: '', iconColor: 'text-[#d4ff00]/60' };
+    if (index === 0) return { color: 'text-[#d4ff00]', shadow: 'drop-shadow-[0_0_7px_rgba(212,255,0,0.35)]', iconColor: 'text-[#d4ff00]' };
+    if (index === 1) return { color: 'text-[#d4ff00]/75', shadow: 'drop-shadow-[0_0_4px_rgba(212,255,0,0.18)]', iconColor: 'text-[#d4ff00]/75' };
+    if (index === 2) return { color: 'text-[#d4ff00]/55', shadow: '', iconColor: 'text-[#d4ff00]/55' };
     return { color: 'text-white/70', shadow: '', iconColor: 'text-white/70' };
   };
 
   // progreso meta basado en INGRESOS ASEGURADOS
   const metaBase = audit?.facturacionGarantizada ?? 0;
   const metaPct = targetBimestral > 0 ? (metaBase / targetBimestral) * 100 : 0;
-
-  return (
+    return (
     <div className={`min-h-screen ${BG_PURE_BLACK} text-white font-sans selection:bg-[#d4ff00] selection:text-black pb-20`}>
       {(loading || isPending) && (
         <div className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-[#0a0a0a] border border-white/10 rounded-[2rem] px-8 py-6 text-center">
+          <div className="bg-[#0a0a0a] border border-white/5 rounded-[2rem] px-8 py-6 text-center">
             <div className="text-[10px] font-black uppercase tracking-[0.35em] text-white/70 mb-2">Procesando CSV</div>
             <div className="text-sm font-bold text-white/90">Normalizando datos y calculando métricas…</div>
             <div className="mt-4 h-1 w-56 bg-white/10 rounded-full overflow-hidden">
@@ -937,7 +1069,7 @@ export default function App() {
         </div>
       )}
 
-      <header className="border-b border-white/10 px-10 h-20 flex items-center justify-between sticky top-0 bg-black/80 backdrop-blur-2xl z-50">
+      <header className="border-b border-white/5 px-10 h-20 flex items-center justify-between sticky top-0 bg-black/80 backdrop-blur-2xl z-50">
         <div className="flex items-center gap-4 group">
           <label className="flex items-center justify-center min-w-[100px] h-[45px] transition-all cursor-pointer relative overflow-hidden group hover:scale-105 active:scale-95 bg-black">
             {customLogo ? (
@@ -951,7 +1083,7 @@ export default function App() {
             <input type="file" accept="image/png, image/jpeg" onChange={handleLogoUpload} className="hidden" />
           </label>
 
-          <div className="h-6 w-[1px] bg-white/20" />
+          <div className="h-6 w-[1px] bg-white/15" />
 
           <div className="flex flex-col">
             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/70 leading-none">Management System</span>
@@ -964,7 +1096,7 @@ export default function App() {
             <button
               type="button"
               onClick={clearData}
-              className="group flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 transition-all active:scale-95"
+              className="group flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/25 bg-red-500/5 hover:bg-red-500/10 transition-all active:scale-95"
               title="Limpiar datos cargados"
             >
               <Trash2 className="w-3.5 h-3.5 text-red-500/80" />
@@ -987,14 +1119,16 @@ export default function App() {
           <div
             className={`mb-6 border rounded-2xl px-5 py-4 ${
               banner.type === 'error'
-                ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                ? 'border-red-500/25 bg-red-500/10 text-red-200'
                 : banner.type === 'warn'
-                ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-100'
-                : 'border-white/15 bg-white/5 text-white/80'
+                ? 'border-yellow-500/25 bg-yellow-500/10 text-yellow-100'
+                : 'border-white/10 bg-white/5 text-white/80'
             }`}
           >
             <div className="flex items-center justify-between gap-4">
-              <span className="text-[10px] font-black uppercase tracking-widest">{banner.type === 'error' ? 'Error' : banner.type === 'warn' ? 'Atención' : 'Info'}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">
+                {banner.type === 'error' ? 'Error' : banner.type === 'warn' ? 'Atención' : 'Info'}
+              </span>
               <span className="text-[11px] font-bold tracking-wide">{banner.message}</span>
             </div>
           </div>
@@ -1002,7 +1136,7 @@ export default function App() {
 
         {!audit ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-in fade-in zoom-in duration-500">
-            <div className="w-24 h-24 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center justify-center mb-8 relative group overflow-hidden">
+            <div className="w-24 h-24 bg-white/5 border border-white/5 rounded-[2.5rem] flex items-center justify-center mb-8 relative group overflow-hidden">
               <div className="absolute inset-0 bg-[#d4ff00]/5 translate-y-24 group-hover:translate-y-0 transition-transform duration-700" />
               <Database className="text-white/50 w-10 h-10 group-hover:text-[#d4ff00] transition-colors relative z-10" />
             </div>
@@ -1011,7 +1145,7 @@ export default function App() {
             </h1>
             <p className="text-xs text-white/70 uppercase tracking-[0.3em] mb-10">Selecciona tu base de datos para comenzar</p>
             <label
-              className="bg-[#d4ff00] text-black px-12 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-[0_10px_30px_rgba(212,255,0,0.2)]"
+              className="bg-[#d4ff00] text-black px-12 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-[0_10px_30px_rgba(212,255,0,0.18)]"
               title={`Importar CSV (máx ${MAX_FILE_MB}MB)`}
             >
               Importar Archivo CSV
@@ -1023,13 +1157,14 @@ export default function App() {
             {/* KPI Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52">
-                <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/10 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
                   <Zap className="w-5 h-5 text-[#d4ff00]" />
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">FACTURACIÓN TOTAL</p>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xl font-bold text-[#d4ff00] opacity-80">$</span>
+                  <div className="flex items-baseline gap-2">
+                    {/* ✅ menos brillante */}
+                    <span className="text-xl font-bold text-[#b8df00]/55">$</span>
                     <AnimatedNumber value={audit.totalRevenue} />
                   </div>
                   <p className="text-[9px] text-white/40 mt-1 font-bold tracking-widest uppercase">{audit.totalCount} VENTAS</p>
@@ -1037,7 +1172,7 @@ export default function App() {
               </GlowCard>
 
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52">
-                <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/10 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
                   <ShieldCheck className="w-5 h-5 text-[#d4ff00]" />
                 </div>
                 <div>
@@ -1049,10 +1184,10 @@ export default function App() {
 
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52 relative">
                 <div className="flex justify-between items-start">
-                  <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/10 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
                     <Database className="w-5 h-5 text-[#d4ff00]" />
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 border border-white/10 bg-white/5 rounded-full">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 border border-white/8 bg-white/5 rounded-full">
                     <div className="w-1 h-1 rounded-full bg-[#d4ff00] animate-pulse" />
                     <span className="text-[8px] font-black text-white/70 tracking-[0.1em] uppercase">{audit.guaranteedCount} GARANTIZADAS</span>
                   </div>
@@ -1067,7 +1202,7 @@ export default function App() {
               {/* PROGRESO META (BASE: INGRESOS ASEGURADOS) */}
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52">
                 <div className="flex justify-between items-start">
-                  <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/10 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
                     <Target className="w-5 h-5 text-[#d4ff00]" />
                   </div>
                   <div className="text-right">
@@ -1077,7 +1212,7 @@ export default function App() {
                         type="number"
                         value={targetBimestral}
                         onChange={(e) => setTargetBimestral(Number(e.target.value))}
-                        className="bg-transparent text-[#d4ff00] font-black text-right text-sm outline-none border-b border-white/20 focus:border-[#d4ff00] w-24 transition-all"
+                        className="bg-transparent text-[#d4ff00]/80 font-black text-right text-sm outline-none border-b border-white/15 focus:border-[#d4ff00]/80 w-24 transition-all"
                         title="Editar meta bimestral"
                       />
                       <Edit2 className="w-3 h-3 text-white/50" />
@@ -1091,25 +1226,34 @@ export default function App() {
                   </div>
                   <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="bg-[#d4ff00] h-full rounded-full shadow-[0_0_10px_#d4ff00] transition-all duration-1000"
+                      className="bg-[#d4ff00] h-full rounded-full shadow-[0_0_10px_rgba(212,255,0,0.22)] transition-all duration-1000"
                       style={{ width: `${Math.min(metaPct, 100)}%` }}
-                    ></div>
+                    />
                   </div>
                 </div>
               </GlowCard>
             </div>
 
-            {/* SECCIÓN: Estado de Facturación Garantizada */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* SECCIÓN: Estado de Facturación Garantizada + multi-producto */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
                 <div className="flex justify-between items-start">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">FACTURACIÓN GARANTIZADA</p>
-                  <span className="text-2xl font-bold text-[#d4ff00] tracking-tighter">{((audit.facturacionGarantizada / audit.totalRevenue) * 100).toFixed(1)}%</span>
+                  <span className="text-2xl font-bold text-[#d4ff00]/85 tracking-tighter">
+                    {audit.totalRevenue > 0 ? ((audit.facturacionGarantizada / audit.totalRevenue) * 100).toFixed(1) : '0.0'}%
+                  </span>
                 </div>
                 <div>
-                  <div className="text-4xl font-bold text-[#d4ff00] tracking-tighter mb-2">{fmt(audit.facturacionGarantizada)}</div>
+                  <div className="text-4xl font-bold text-[#d4ff00]/85 tracking-tighter mb-2">
+                    {fmt(audit.facturacionGarantizada)}
+                  </div>
                   <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
-                    <div className="bg-[#d4ff00] h-full shadow-[0_0_10px_#d4ff00] transition-all" style={{ width: `${(audit.facturacionGarantizada / audit.totalRevenue) * 100}%` }}></div>
+                    <div
+                      className="bg-[#d4ff00] h-full shadow-[0_0_10px_rgba(212,255,0,0.22)] transition-all"
+                      style={{
+                        width: `${audit.totalRevenue > 0 ? (audit.facturacionGarantizada / audit.totalRevenue) * 100 : 0}%`,
+                      }}
+                    />
                   </div>
                   <p className="text-[9px] text-white/40 mt-3 font-bold tracking-widest uppercase">INGRESOS ASEGURADOS</p>
                 </div>
@@ -1118,30 +1262,91 @@ export default function App() {
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
                 <div className="flex justify-between items-start">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">FACTURACIÓN POR GARANTIZAR</p>
-                  <span className="text-2xl font-bold text-white/40 tracking-tighter">{((audit.facturacionPorGarantizar / audit.totalRevenue) * 100).toFixed(1)}%</span>
+                  <span className="text-2xl font-bold text-white/35 tracking-tighter">
+                    {audit.totalRevenue > 0 ? ((audit.facturacionPorGarantizar / audit.totalRevenue) * 100).toFixed(1) : '0.0'}%
+                  </span>
                 </div>
                 <div>
-                  <div className="text-4xl font-bold text-white tracking-tighter mb-2">{fmt(audit.facturacionPorGarantizar)}</div>
+                  <div className="text-4xl font-bold text-white tracking-tighter mb-2">
+                    {fmt(audit.facturacionPorGarantizar)}
+                  </div>
                   <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
-                    <div className="bg-white/40 h-full transition-all" style={{ width: `${(audit.facturacionPorGarantizar / audit.totalRevenue) * 100}%` }}></div>
+                    <div
+                      className="bg-white/35 h-full transition-all"
+                      style={{
+                        width: `${audit.totalRevenue > 0 ? (audit.facturacionPorGarantizar / audit.totalRevenue) * 100 : 0}%`,
+                      }}
+                    />
                   </div>
                   <div className="flex justify-between items-center mt-3">
                     <p className="text-[9px] text-white/40 font-bold tracking-widest uppercase">EN PROCESO</p>
                   </div>
                 </div>
               </GlowCard>
+
+              {/* ✅ CLIENTES EN +1 PRODUCTO (sin barra, mejor distribuida) */}
+              <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
+                <div className="flex items-start justify-between">
+                  <p className="text-[10px] uppercase tracking-[0.28em] text-white/75 font-bold">
+                    CLIENTES EN +1 PRODUCTO
+                  </p>
+
+                  <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-white/70" />
+                  </div>
+                </div>
+
+                <div className="flex items-end justify-between gap-8">
+                  <div className="flex-1">
+                    <div className="text-[9px] text-white/45 font-black uppercase tracking-widest mb-2">
+                      Repetidos
+                    </div>
+                    <div className="text-6xl font-black tracking-tighter text-white leading-none">
+                      {fmtNumberAR.format(audit.multiProductCustomers || 0)}
+                    </div>
+                  </div>
+
+                  <div className="w-px h-16 bg-white/5" />
+
+                  <div className="flex-1 text-right">
+                    <div className="text-[9px] text-white/45 font-black uppercase tracking-widest mb-2">
+                      Total clientes
+                    </div>
+                    <div className="text-3xl font-black tracking-tight text-white/85 leading-none">
+                      {fmtNumberAR.format(audit.uniqueCustomersCount || 0)}
+                    </div>
+
+                    <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-white/45">
+                      Tasa{' '}
+                      <span className="text-[#b8df00]/80">
+                        {(
+                          (audit.uniqueCustomersCount || 0) > 0
+                            ? ((audit.multiProductCustomers || 0) / audit.uniqueCustomersCount) * 100
+                            : 0
+                        ).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[9px] text-white/35 mt-4 font-bold tracking-widest uppercase">
+                  Personas repetidas en productos distintos
+                </p>
+              </GlowCard>
             </div>
 
             {/* Actividad Diaria */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-[#0a0a0a] border border-white/10 p-8 rounded-[2.5rem]">
+              <div className="lg:col-span-2 bg-[#0a0a0a] border border-white/5 p-8 rounded-[2.5rem]">
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <Calendar className="w-4 h-4 text-[#d4ff00]" />
                       <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Actividad Diaria</h3>
                     </div>
-                    <p className="text-[10px] uppercase tracking-widest text-white/80 font-bold">Intensidad de volumen • Últimos 30 días</p>
+                    <p className="text-[10px] uppercase tracking-widest text-white/80 font-bold">
+                      Intensidad de volumen • Últimos 30 días
+                    </p>
                   </div>
                 </div>
 
@@ -1149,10 +1354,10 @@ export default function App() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={audit.activityTimeline} margin={{ bottom: 20 }}>
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 9 }} interval={2} />
-                      <Tooltip cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }} content={<CustomActivityTooltip fmt={fmt} />} />
+                      <Tooltip cursor={{ fill: 'rgba(212, 255, 0, 0.04)' }} content={<CustomActivityTooltip fmt={fmt} />} />
                       <Bar dataKey="total" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                         {audit.activityTimeline.map((entry, index) => {
-                          const intensity = entry.isZero ? 0.08 : 0.25 + (entry.total / audit.maxActivityVal) * 0.75;
+                          const intensity = entry.isZero ? 0.07 : 0.22 + (entry.total / audit.maxActivityVal) * 0.72;
                           return <Cell key={`cell-${index}`} fill={LIME_NEON} opacity={intensity} />;
                         })}
                       </Bar>
@@ -1161,7 +1366,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-white/10 p-8 rounded-[2.5rem] flex flex-col justify-center text-center">
+              <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-white/5 p-8 rounded-[2.5rem] flex flex-col justify-center text-center">
                 <div className="w-16 h-16 bg-[#d4ff00]/5 rounded-2xl flex items-center justify-center mx-auto mb-6">
                   <BarChart3 className="w-8 h-8 text-[#d4ff00]" />
                 </div>
@@ -1172,7 +1377,7 @@ export default function App() {
             </div>
 
             {/* Evolución Temporal */}
-            <div className={`${CARD_DARK} border border-white/10 p-8 rounded-[2.5rem]`}>
+            <div className={`${CARD_DARK} border border-white/5 p-8 rounded-[2.5rem]`}>
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-4 h-4 text-[#d4ff00]" />
                 <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Evolución Diaria</h3>
@@ -1183,14 +1388,14 @@ export default function App() {
                   <AreaChart data={audit.timelineData}>
                     <defs>
                       <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.3} />
+                        <stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.26} />
                         <stop offset="95%" stopColor={LIME_NEON} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 10 }} />
                     <YAxis hide />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px' }}
                       formatter={(v) => [fmt(v), 'Ingresos']}
                     />
                     <Area type="monotone" dataKey="val" stroke={LIME_NEON} fillOpacity={1} fill="url(#colorVal)" strokeWidth={3} isAnimationActive={false} />
@@ -1201,7 +1406,7 @@ export default function App() {
 
             {/* Ranking de Productos */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-7 bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-8 bg-gradient-to-br from-[#0a0a0a] via-black to-[#050505] shadow-[inset_0_0_60px_rgba(0,0,0,1)]">
+              <div className="lg:col-span-7 bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] p-8 bg-gradient-to-br from-[#0a0a0a] via-black to-[#050505] shadow-[inset_0_0_60px_rgba(0,0,0,1)]">
                 <div className="flex flex-col md:flex-row items-center gap-8 h-full">
                   <div className="w-full md:w-3/5 h-[350px] relative">
                     <ResponsiveContainer width="100%" height="100%">
@@ -1227,7 +1432,7 @@ export default function App() {
                               key={`cell-${index}`}
                               fill={COLORS[index % COLORS.length]}
                               className="transition-all duration-500 cursor-pointer"
-                              style={{ filter: `drop-shadow(0 0 8px ${COLORS[index % COLORS.length]}33)` }}
+                              style={{ filter: `drop-shadow(0 0 8px ${COLORS[index % COLORS.length]}22)` }}
                             />
                           ))}
                         </Pie>
@@ -1248,7 +1453,7 @@ export default function App() {
                       <div
                         key={p.fullName}
                         className={`group/item transition-all duration-300 p-2 rounded-xl ${
-                          activeIndex === i ? 'bg-white/5 border-l border-[#d4ff00]/50' : 'opacity-70 hover:opacity-100'
+                          activeIndex === i ? 'bg-white/5 border-l border-[#d4ff00]/40' : 'opacity-70 hover:opacity-100'
                         }`}
                         onMouseEnter={() => setActiveIndex(i)}
                         onMouseLeave={() => setActiveIndex(null)}
@@ -1259,10 +1464,18 @@ export default function App() {
                               {p.name}
                             </span>
                           </InstantTooltip>
-                          <span className="text-[11px] font-black text-[#d4ff00]/90 shrink-0 ml-2">{((p.value / audit.totalRevenue) * 100).toFixed(1)}%</span>
+                          <span className="text-[11px] font-black text-[#d4ff00]/85 shrink-0 ml-2">
+                            {audit.totalRevenue > 0 ? ((p.value / audit.totalRevenue) * 100).toFixed(1) : '0.0'}%
+                          </span>
                         </div>
                         <div className="w-full h-[3px] bg-white/5 rounded-full overflow-hidden">
-                          <div className="h-full transition-all duration-1000" style={{ width: `${(p.value / audit.totalRevenue) * 100}%`, backgroundColor: COLORS[i % COLORS.length] }} />
+                          <div
+                            className="h-full transition-all duration-1000"
+                            style={{
+                              width: `${audit.totalRevenue > 0 ? (p.value / audit.totalRevenue) * 100 : 0}%`,
+                              backgroundColor: COLORS[i % COLORS.length],
+                            }}
+                          />
                         </div>
                       </div>
                     ))}
@@ -1270,7 +1483,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Top 3 List (Productos) — con tooltip si el título está abreviado */}
+              {/* Top 3 List (Productos) */}
               <div className="lg:col-span-5 grid grid-cols-1 gap-4">
                 {audit.top3Products.map((p, i) => {
                   const style = getProductRankingStyle(i);
@@ -1278,14 +1491,14 @@ export default function App() {
                   return (
                     <div
                       key={p.fullName}
-                      className="bg-[#0a0a0a] border border-white/10 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.03]"
+                      className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.03]"
                     >
-                      <div className="absolute -right-4 -bottom-4 opacity-[0.08] group-hover:opacity-[0.22] transition-opacity pointer-events-none -rotate-12">
+                      <div className="absolute -right-4 -bottom-4 opacity-[0.07] group-hover:opacity-[0.18] transition-opacity pointer-events-none -rotate-12">
                         <Trophy size={110} strokeWidth={1} className="text-white/30 group-hover:text-white/40 transition-colors" />
                       </div>
 
                       <div className="flex items-center gap-5 relative z-10 min-w-0 flex-1">
-                        <div className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border border-white/10 bg-black/60 transition-all duration-500">
+                        <div className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border border-white/8 bg-black/60 transition-all duration-500">
                           {i === 0 ? <Trophy className={style.iconColor} size={24} /> : i === 1 ? <Award className={style.iconColor} size={24} /> : <Target className={style.iconColor} size={24} />}
                         </div>
 
@@ -1314,89 +1527,190 @@ export default function App() {
               </div>
             </div>
 
-            {/* SECCIÓN: Rendimiento por Vendedor (Ranking Inteligente) */}
-            <div className="mt-10 pt-10 border-t border-white/10">
-              <div className="flex items-center gap-2 mb-8">
-                <User className="w-5 h-5 text-[#d4ff00]" />
-                <h3 className="text-2xl font-bold text-white uppercase tracking-tighter">Ranking de Asesores</h3>
-              </div>
+           {/* SECCIÓN: Rendimiento por Vendedor (Ranking v1 + Expand PRO + Copa + Sparkline hover) */}
+<div className="mt-10 pt-10 border-t border-white/10">
+  <div className="flex items-center gap-2 mb-8">
+    <User className="w-5 h-5 text-[#d4ff00]" />
+    <h3 className="text-2xl font-bold text-white uppercase tracking-tighter">Ranking de Asesores</h3>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {audit.sellers.map((s, i) => {
-                  const style = getSellerRankingStyle(i);
-                  const nameShort = s.name;
-                  const nameNeedsTooltip = String(nameShort || '').length > 22;
+    <div className="ml-auto flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5">
+      <span className="text-[9px] font-black uppercase tracking-widest text-white/60">
+        {audit?.sellers?.length ?? 0} agentes
+      </span>
+    </div>
+  </div>
 
-                  return (
-                    <div
-                      key={s.name}
-                      className={`group bg-[#0a0a0a] border ${style.cardBorder} rounded-[2rem] p-6 relative overflow-hidden transition-all duration-300 hover:scale-[1.01]`}
-                    >
-                      <div className="absolute bottom-[-36px] right-[-36px] opacity-[0.035] group-hover:opacity-[0.11] transition-all duration-700 pointer-events-none rotate-12">
-                        <Trophy size={210} strokeWidth={1} className="text-white/25 group-hover:text-white/35 transition-colors" />
-                      </div>
+  <div className="space-y-4">
+    {audit.sellers.map((s, i) => {
+      const style = getSellerRankingStyle(i);
+      const isOpen = expandedSeller === s.name;
+      const sharePct = audit.totalRevenue > 0 ? (s.val / audit.totalRevenue) * 100 : 0;
 
-                      <div className="flex items-center justify-between mb-4 relative z-10">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className={`${style.badgeBg} ${style.badgeText} w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm`}>
-                            {i + 1}
-                          </span>
-
-                          {nameNeedsTooltip ? (
-                            <InstantTooltip text={s.name}>
-                              <h4 className="text-sm font-black uppercase truncate max-w-[180px] text-white cursor-help" title={s.name}>
-                                {s.name}
-                              </h4>
-                            </InstantTooltip>
-                          ) : (
-                            <h4 className="text-sm font-black uppercase truncate max-w-[180px] text-white" title={s.name}>
-                              {s.name}
-                            </h4>
-                          )}
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest mb-0.5">{s.count} VENTAS</p>
-                          <span className="text-2xl font-black text-[#d4ff00] tracking-tighter">{fmt(s.val)}</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 mb-6 relative z-10">
-                        <div className="bg-black/60 rounded-xl p-3 border border-white/5 backdrop-blur-sm">
-                          <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-1">Promedio Diario</p>
-                          <p className="text-sm font-bold text-white tracking-tight">{fmt(s.promDia)}</p>
-                        </div>
-                        <div className="bg-black/60 rounded-xl p-3 border border-white/5 backdrop-blur-sm">
-                          <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-1">Garantizado ({s.garantizadas} est.)</p>
-                          <p className="text-sm font-bold text-[#d4ff00] tracking-tight">{fmt(s.facturacionGarantizada)}</p>
-                        </div>
-                      </div>
-
-                      <div className="relative z-10">
-                        <p className="text-[8px] text-white/40 uppercase tracking-widest font-bold mb-2 text-center">Evolución de ventas</p>
-                        <div className="h-[140px] w-full">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={s.trend}>
-                              <defs>
-                                <linearGradient id={`colorS-${i}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.5} />
-                                  <stop offset="95%" stopColor={LIME_NEON} stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 9 }} minTickGap={15} />
-                              <Tooltip content={<CustomActivityTooltip fmt={fmt} />} cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }} />
-                              <Area type="monotone" dataKey="val" stroke={LIME_NEON} fillOpacity={1} fill={`url(#colorS-${i})`} strokeWidth={2} isAnimationActive={false} />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+      return (
+        <div key={s.name} className="rounded-[2rem] overflow-hidden relative">
+          {/* ===== ROW COMPACTA (colapsado) ===== */}
+          <button
+            type="button"
+            onClick={() => toggleSeller(s.name)}
+            className={`relative w-full text-left group bg-[#0a0a0a] rounded-[2rem] px-6 py-5 transition-all duration-300 hover:bg-white/[0.02]`}
+          >
+            {/* Copa (colapsado: arriba/derecha, inclinada a la izquierda) */}
+            <div
+              className={`pointer-events-none absolute right-[-22px] top-[-28px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
+                ${isOpen ? 'opacity-0 translate-y-10 rotate-[12deg]' : 'opacity-[0.11] translate-y-0 -rotate-[12deg]'}
+              `}
+            >
+              <Trophy size={190} strokeWidth={1} className="text-white/35" />
             </div>
 
-        
+            <div className="flex items-center gap-5">
+              {/* Rank + Nombre */}
+              <div className="shrink-0 flex items-center gap-3 min-w-[240px]">
+                {/* Número SIN fondo (solo color) */}
+                <span className={`${style.rankWrap}`}>
+                  <span className={`${style.rankText} ${style.rankTextColor}`}>{i + 1}</span>
+                </span>
+
+                <div className="min-w-0">
+  <div className="text-[12px] font-black uppercase tracking-wider text-white truncate max-w-[200px]">
+    {s.name}
+  </div>
+</div>
+              </div>
+
+              {/* Sparkline (muy opaca en idle, brillante en hover) */}
+              <div
+                className={`flex-1 min-w-[220px] h-[42px] origin-left transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
+                  ${isOpen ? 'opacity-0 translate-y-4 scale-[1.12]' : 'opacity-25 group-hover:opacity-95 translate-y-0 scale-100'}
+                `}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={s.trend}>
+                    <Line
+                      type="monotone"
+                      dataKey="val"
+                      stroke={LIME_NEON}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Share */}
+              <div className="hidden md:flex flex-col items-end min-w-[110px]">
+                <div className="text-[9px] font-black uppercase tracking-widest text-white/40">Share</div>
+                <div className="text-[14px] font-black tracking-tight text-[#d4ff00]/90">{sharePct.toFixed(1)}%</div>
+              </div>
+
+              {/* Total */}
+              <div className="ml-auto flex flex-col items-end min-w-[190px]">
+                <div className="text-[9px] font-black uppercase tracking-widest text-white/40">{s.count} ventas</div>
+                <div className={`${style.amountText} ${style.amountColor}`}>{fmt(s.val)}</div>
+              </div>
+            </div>
+          </button>
+
+          {/* ===== EXPANDIDO (sin bordes internos) ===== */}
+          <div
+            className={`overflow-hidden transition-[max-height,opacity] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]
+              ${isOpen ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0'}
+            `}
+          >
+            <div className="px-6 pt-5 pb-6 relative">
+              {/* Métricas (más destacadas) */}
+              <div
+                className={`grid grid-cols-1 md:grid-cols-2 gap-10 mb-6 transition-all duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]
+                  ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}
+                `}
+              >
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/35 mb-2">
+                    Promedio diario
+                  </div>
+                  <div className="text-[22px] font-black tracking-tight text-white leading-none">
+                    {fmt(s.promDia)}
+                  </div>
+                </div>
+
+                <div className="md:text-right">
+                  <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/35 mb-2">
+                    Garantizado ({s.garantizadas} est.)
+                  </div>
+                  <div className="text-[22px] font-black tracking-tight text-[#d4ff00]/90 leading-none">
+                    {fmt(s.facturacionGarantizada)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Título */}
+              <div
+                className={`text-center mb-3 transition-all duration-400 delay-75 ease-[cubic-bezier(0.22,1,0.36,1)]
+                  ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
+                `}
+              >
+                <div className="text-[10px] font-black uppercase tracking-[0.55em] text-white/30">
+                  Evolución de ventas
+                </div>
+              </div>
+
+              {/* Gráfico grande + copa (expandido: abajo/derecha, inclinada a la derecha) */}
+              <div
+                className={`relative w-full transition-all duration-500 delay-100 ease-[cubic-bezier(0.22,1,0.36,1)]
+                  ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}
+                `}
+              >
+                <div
+                  className={`pointer-events-none absolute right-[-22px] bottom-[-26px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
+                    ${isOpen ? 'opacity-[0.12] translate-y-0 rotate-[12deg]' : 'opacity-0 translate-y-[-14px] rotate-[12deg]'}
+                  `}
+                >
+                  <Trophy size={210} strokeWidth={1} className="text-white/35" />
+                </div>
+
+                <div className="h-[250px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={s.trend} margin={{ left: 8, right: 8, top: 10, bottom: 8 }}>
+                      <defs>
+                        <linearGradient id={`sellerDetail-${i}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.32} />
+                          <stop offset="95%" stopColor={LIME_NEON} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+
+                      <XAxis
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: '#777', fontSize: 10 }}
+                        minTickGap={18}
+                      />
+                      <YAxis hide />
+
+                      <Tooltip content={<CustomActivityTooltip fmt={fmt} />} cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }} />
+
+                      <Area
+                        type="monotone"
+                        dataKey="val"
+                        stroke={LIME_NEON}
+                        fillOpacity={1}
+                        fill={`url(#sellerDetail-${i})`}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
+
           </div>
         )}
       </main>
