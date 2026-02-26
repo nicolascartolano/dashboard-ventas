@@ -343,44 +343,45 @@ const abbreviateName = (name) => {
 
 const getSellerRankingStyle = (index) => {
   const base = {
-    // borde MUY suave (nada blanco fuerte)
-    rowBorder:' ',
-    // número sin fondo
-    rankWrap: 'w-10 h-10 flex items-center justify-center',
-    rankText: 'text-[12px] font-black',
-    // monto
+    rowBorder: '', // sin bordes
     amountText: 'text-[22px] font-black tracking-tighter',
+    // cajita del número (oscura, sin color sólido)
+    rankBox: 'w-10 h-10 rounded-2xl flex items-center justify-center bg-black/60 border border-white/10',
+    rankText: 'text-[12px] font-black',
   };
 
   if (index === 0) {
     return {
       ...base,
-      rowBorder: 'border border-[#d4ff00]/10',
       rankTextColor: 'text-[#d4ff00]',
+      // destello fuerte
+      rankGlow: 'shadow-[0_0_0_1px_rgba(212,255,0,0.18),0_0_22px_rgba(212,255,0,0.35)]',
       amountColor: 'text-[#d4ff00]',
     };
   }
   if (index === 1) {
     return {
       ...base,
-      rowBorder: 'border border-[#d4ff00]/7',
       rankTextColor: 'text-[#b8df00]',
+      // destello medio
+      rankGlow: 'shadow-[0_0_0_1px_rgba(184,223,0,0.14),0_0_16px_rgba(184,223,0,0.26)]',
       amountColor: 'text-[#b8df00]',
     };
   }
   if (index === 2) {
     return {
       ...base,
-      rowBorder: 'border border-[#d4ff00]/5',
       rankTextColor: 'text-[#8ca900]',
+      // destello leve
+      rankGlow: 'shadow-[0_0_0_1px_rgba(140,169,0,0.10),0_0_12px_rgba(140,169,0,0.18)]',
       amountColor: 'text-[#8ca900]',
     };
   }
 
   return {
     ...base,
-    rowBorder: 'border border-white/4',
-    rankTextColor: 'text-white/70',
+    rankTextColor: 'text-white/60',
+    rankGlow: 'shadow-none',
     amountColor: 'text-white',
   };
 };
@@ -1406,7 +1407,7 @@ export default function App() {
 
             {/* Ranking de Productos */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-7 bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] p-8 bg-gradient-to-br from-[#0a0a0a] via-black to-[#050505] shadow-[inset_0_0_60px_rgba(0,0,0,1)]">
+              <div className="lg:col-span-7 bg-[#0a0a0a] rounded-[2.5rem] p-8 bg-gradient-to-br from-[#0a0a0a] via-black to-[#050505] shadow-[inset_0_0_60px_rgba(0,0,0,1)]">
                 <div className="flex flex-col md:flex-row items-center gap-8 h-full">
                   <div className="w-full md:w-3/5 h-[350px] relative">
                     <ResponsiveContainer width="100%" height="100%">
@@ -1491,14 +1492,14 @@ export default function App() {
                   return (
                     <div
                       key={p.fullName}
-                      className="bg-[#0a0a0a] border border-white/5 p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.03]"
+                      className="bg-[#0a0a0a] p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.03]"
                     >
                       <div className="absolute -right-4 -bottom-4 opacity-[0.07] group-hover:opacity-[0.18] transition-opacity pointer-events-none -rotate-12">
                         <Trophy size={110} strokeWidth={1} className="text-white/30 group-hover:text-white/40 transition-colors" />
                       </div>
 
                       <div className="flex items-center gap-5 relative z-10 min-w-0 flex-1">
-                        <div className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center border border-white/8 bg-black/60 transition-all duration-500">
+                        <div className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-black/60 transition-all duration-500">
                           {i === 0 ? <Trophy className={style.iconColor} size={24} /> : i === 1 ? <Award className={style.iconColor} size={24} /> : <Target className={style.iconColor} size={24} />}
                         </div>
 
@@ -1527,7 +1528,7 @@ export default function App() {
               </div>
             </div>
 
-           {/* SECCIÓN: Rendimiento por Vendedor (Ranking v1 + Expand PRO + Copa + Sparkline hover) */}
+           {/* SECCIÓN: Rendimiento por Vendedor (Ranking v1 + Expand + Glow TOP3 + Copa) */}
 <div className="mt-10 pt-10 border-t border-white/10">
   <div className="flex items-center gap-2 mb-8">
     <User className="w-5 h-5 text-[#d4ff00]" />
@@ -1552,30 +1553,30 @@ export default function App() {
           <button
             type="button"
             onClick={() => toggleSeller(s.name)}
-            className={`relative w-full text-left group bg-[#0a0a0a] rounded-[2rem] px-6 py-5 transition-all duration-300 hover:bg-white/[0.02]`}
+            className="relative w-full text-left group bg-[#0a0a0a] rounded-[2rem] px-6 py-5 transition-all duration-300 hover:bg-white/[0.02]"
           >
             {/* Copa (colapsado: arriba/derecha, inclinada a la izquierda) */}
             <div
-              className={`pointer-events-none absolute right-[-22px] top-[-28px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
-                ${isOpen ? 'opacity-0 translate-y-10 rotate-[12deg]' : 'opacity-[0.11] translate-y-0 -rotate-[12deg]'}
+              className={`pointer-events-none absolute right-[-18px] top-[-22px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
+                ${isOpen ? 'opacity-0 translate-y-10 rotate-[12deg]' : 'opacity-[0.12] translate-y-0 -rotate-[12deg]'}
               `}
             >
-              <Trophy size={190} strokeWidth={1} className="text-white/35" />
+              <Trophy size={150} strokeWidth={1} className="text-white/35" />
             </div>
 
             <div className="flex items-center gap-5">
               {/* Rank + Nombre */}
-              <div className="shrink-0 flex items-center gap-3 min-w-[240px]">
-                {/* Número SIN fondo (solo color) */}
-                <span className={`${style.rankWrap}`}>
+              <div className="shrink-0 flex items-center gap-4 min-w-[260px]">
+                {/* Número con cajita oscura + destello TOP 3 */}
+                <div className={`shrink-0 ${style.rankBox} ${style.rankGlow}`}>
                   <span className={`${style.rankText} ${style.rankTextColor}`}>{i + 1}</span>
-                </span>
+                </div>
 
                 <div className="min-w-0">
-  <div className="text-[12px] font-black uppercase tracking-wider text-white truncate max-w-[200px]">
-    {s.name}
-  </div>
-</div>
+                  <div className="text-[12px] font-black uppercase tracking-wider text-white truncate max-w-[220px]">
+                    {s.name}
+                  </div>
+                </div>
               </div>
 
               {/* Sparkline (muy opaca en idle, brillante en hover) */}
@@ -1600,13 +1601,17 @@ export default function App() {
 
               {/* Share */}
               <div className="hidden md:flex flex-col items-end min-w-[110px]">
-                <div className="text-[9px] font-black uppercase tracking-widest text-white/40">Share</div>
-                <div className="text-[14px] font-black tracking-tight text-[#d4ff00]/90">{sharePct.toFixed(1)}%</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-white/35">Share</div>
+                <div className="text-[14px] font-black tracking-tight text-[#d4ff00]/90">
+                  {sharePct.toFixed(1)}%
+                </div>
               </div>
 
               {/* Total */}
               <div className="ml-auto flex flex-col items-end min-w-[190px]">
-                <div className="text-[9px] font-black uppercase tracking-widest text-white/40">{s.count} ventas</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-white/35">
+                  {s.count} ventas
+                </div>
                 <div className={`${style.amountText} ${style.amountColor}`}>{fmt(s.val)}</div>
               </div>
             </div>
@@ -1637,13 +1642,13 @@ export default function App() {
                 <div className="md:text-right">
                   <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/35 mb-2">
                     Garantizado ({s.garantizadas} est.)
-                  </div>
-                  <div className="text-[22px] font-black tracking-tight text-[#d4ff00]/90 leading-none">
-                    {fmt(s.facturacionGarantizada)}
-                  </div>
-                </div>
-              </div>
-
+                      </div>
+                      <div className="text-[22px] font-black tracking-tight text-white leading-none">
+                        {fmt(s.facturacionGarantizada)}
+                      </div>
+                    </div>
+              </div
+              >
               {/* Título */}
               <div
                 className={`text-center mb-3 transition-all duration-400 delay-75 ease-[cubic-bezier(0.22,1,0.36,1)]
@@ -1688,7 +1693,10 @@ export default function App() {
                       />
                       <YAxis hide />
 
-                      <Tooltip content={<CustomActivityTooltip fmt={fmt} />} cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }} />
+                      <Tooltip
+                        content={<CustomActivityTooltip fmt={fmt} />}
+                        cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }}
+                      />
 
                       <Area
                         type="monotone"
