@@ -1578,8 +1578,8 @@ export default function App() {
 
             {/* Ranking de Productos */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-7 bg-[#0a0a0a] rounded-[2.5rem] p-8 bg-gradient-to-br from-[#0a0a0a] via-black to-[#050505] shadow-[inset_0_0_60px_rgba(0,0,0,1)]">
-                <div className="flex flex-col md:flex-row items-center gap-8 h-full">
+          <div className="lg:col-span-7 bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] p-8">                
+          <div className="flex flex-col md:flex-row items-center gap-8 h-full">
                   <div className="w-full md:w-3/5 h-[350px] relative">
                     <ResponsiveContainer width="100%" height="100%">
                       <RechartsPieChart>
