@@ -1420,7 +1420,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="w-px h-16 bg-white/12" />
+      <div className="w-px h-16 bg-white/10" />
 
       <div className="flex-1 text-right">
         <div className="text-[9px] text-white/45 font-black uppercase tracking-widest mb-2">
