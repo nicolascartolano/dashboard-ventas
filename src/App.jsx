@@ -57,7 +57,7 @@ const DEFAULT_LOGO_URL =
 // --- HARDENING ---
 const MAX_FILE_MB = 20;
 
-// --- FORMATTERS ---
+// --- FORMATTERS (números) ---
 const fmtCurrency = new Intl.NumberFormat('es-AR', {
   style: 'currency',
   currency: 'ARS',
@@ -65,19 +65,27 @@ const fmtCurrency = new Intl.NumberFormat('es-AR', {
 });
 const fmtNumberAR = new Intl.NumberFormat('es-AR');
 
-const fmtDayShort = new Intl.DateTimeFormat('es-AR', {
-  day: '2-digit',
-  month: 'short',
-});
-const fmtDayKeyDDMM = new Intl.DateTimeFormat('es-AR', {
-  day: '2-digit',
-  month: '2-digit',
-});
-const fmtFullDayLabel = new Intl.DateTimeFormat('es-AR', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-});
+// --- FORMATTERS (fechas) ---
+// dd-mmm (13-ene, 03-feb)
+const fmtAxisDate = (d) => {
+  if (!d) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const mon = new Intl.DateTimeFormat('es-AR', { month: 'short' })
+    .format(d)
+    .replace('.', '')
+    .toLowerCase();
+  return `${day}-${mon}`;
+};
+
+// "Miércoles 19-02"
+const fmtTooltipDate = (d) => {
+  if (!d) return '';
+  const weekday = new Intl.DateTimeFormat('es-AR', { weekday: 'long' }).format(d);
+  const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${capWeekday} ${dd}-${mm}`;
+};
 
 // --- HELPERS (fechas y keys consistentes sin UTC) ---
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -95,7 +103,6 @@ const safeUpper = (v) => String(v || '').toUpperCase();
 const normalizeEmail = (v) => {
   const s = String(v || '').trim().toLowerCase();
   if (!s) return '';
-  // recorta espacios internos raros
   return s.replace(/\s+/g, '');
 };
 
@@ -252,10 +259,8 @@ const COL_ALIASES = {
   matricula: ['Matricula', 'matrícula', 'Matrícula', 'matricula'],
   seller: ['Cargado por', 'cargado_por', 'Vendedor', 'vendedor', 'Asesor', 'asesor'],
   estado: ['Estado', 'estado'],
-  // ✅ para detectar multi-producto
   dni: ['DNI', 'dni', 'Documento', 'documento', 'Nro Documento', 'Nro documento'],
   email: ['Email', 'email', 'Correo', 'correo', 'Mail', 'mail'],
-  // opcional: código/camada/cohorte (si existe, mejor key de producto)
   camada: ['Camada', 'camada', 'Código Camada', 'codigo_camada', 'Cohorte', 'cohorte', 'Cod Camada', 'cod_camada'],
 };
 
@@ -341,12 +346,13 @@ const abbreviateName = (name) => {
   return clean.toUpperCase();
 };
 
+// ✅ TOP3 con glow. Desde #4: monto blanco apagado sin glow.
 const getSellerRankingStyle = (index) => {
   const base = {
-    rowBorder: '', // sin bordes
+    rowBorder: '',
     amountText: 'text-[22px] font-black tracking-tighter',
-    // cajita del número (oscura, sin color sólido)
-    rankBox: 'w-10 h-10 rounded-2xl flex items-center justify-center bg-black/60 border border-white/10',
+    rankBox:
+      'w-10 h-10 rounded-2xl flex items-center justify-center bg-black/60 border border-white/10',
     rankText: 'text-[12px] font-black',
   };
 
@@ -354,27 +360,30 @@ const getSellerRankingStyle = (index) => {
     return {
       ...base,
       rankTextColor: 'text-[#d4ff00]',
-      // destello fuerte
-      rankGlow: 'shadow-[0_0_0_1px_rgba(212,255,0,0.18),0_0_22px_rgba(212,255,0,0.35)]',
+      rankGlow:
+        'shadow-[0_0_0_1px_rgba(212,255,0,0.18),0_0_22px_rgba(212,255,0,0.35)]',
       amountColor: 'text-[#d4ff00]',
+      amountGlow: 'drop-shadow-[0_0_14px_rgba(212,255,0,0.22)]',
     };
   }
   if (index === 1) {
     return {
       ...base,
       rankTextColor: 'text-[#b8df00]',
-      // destello medio
-      rankGlow: 'shadow-[0_0_0_1px_rgba(184,223,0,0.14),0_0_16px_rgba(184,223,0,0.26)]',
+      rankGlow:
+        'shadow-[0_0_0_1px_rgba(184,223,0,0.14),0_0_16px_rgba(184,223,0,0.26)]',
       amountColor: 'text-[#b8df00]',
+      amountGlow: 'drop-shadow-[0_0_12px_rgba(184,223,0,0.18)]',
     };
   }
   if (index === 2) {
     return {
       ...base,
       rankTextColor: 'text-[#8ca900]',
-      // destello leve
-      rankGlow: 'shadow-[0_0_0_1px_rgba(140,169,0,0.10),0_0_12px_rgba(140,169,0,0.18)]',
+      rankGlow:
+        'shadow-[0_0_0_1px_rgba(140,169,0,0.10),0_0_12px_rgba(140,169,0,0.18)]',
       amountColor: 'text-[#8ca900]',
+      amountGlow: 'drop-shadow-[0_0_10px_rgba(140,169,0,0.14)]',
     };
   }
 
@@ -382,11 +391,36 @@ const getSellerRankingStyle = (index) => {
     ...base,
     rankTextColor: 'text-white/60',
     rankGlow: 'shadow-none',
-    amountColor: 'text-white',
+    amountColor: 'text-white/70',
+    amountGlow: 'shadow-none',
   };
 };
 
-// --- COMPONENTES ATÓMICOS ---
+// ✅ Top 3 productos: #1 lime, #2 y #3 blancos
+const getProductRankingStyle = (index) => {
+  if (index === 0) {
+    return {
+      color: 'text-[#d4ff00]',
+      shadow: 'drop-shadow-[0_0_7px_rgba(212,255,0,0.35)]',
+      iconColor: 'text-[#d4ff00]',
+      amountColor: 'text-[#d4ff00]',
+    };
+  }
+  if (index === 1 || index === 2) {
+    return {
+      color: 'text-white',
+      shadow: '',
+      iconColor: 'text-white/85',
+      amountColor: 'text-white',
+    };
+  }
+  return {
+    color: 'text-white/70',
+    shadow: '',
+    iconColor: 'text-white/70',
+    amountColor: 'text-white/80',
+  };
+};
 const InstantTooltip = ({ text, children }) => {
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
@@ -461,7 +495,11 @@ const AnimatedNumber = ({ value }) => {
   };
 
   return (
-    <span className={`${getFontSize(formatted)} font-bold tracking-tighter transition-all duration-300`}>
+    <span
+      className={`${getFontSize(
+        formatted
+      )} font-bold tracking-tighter transition-all duration-300`}
+    >
       {formatted}
     </span>
   );
@@ -507,6 +545,22 @@ const PortfolioCenterIcon = () => (
   </div>
 );
 
+// ✅ Trophy pro (trazo continuo) para watermark
+const TrophyMark = ({ className = '' }) => (
+  <svg viewBox="0 0 64 64" className={className} fill="none" aria-hidden="true">
+    <path
+      d="M20 10h24v6c0 10-6 18-12 20v6h8v6H24v-6h8v-6c-6-2-12-10-12-20v-6Z
+         M20 16H10c0 10 6 16 12 16
+         M44 16h10c0 10-6 16-12 16
+         M24 54h16"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 // Active shape con ID único para evitar colisiones
 const makeRenderActiveShape = (glowId) => (props) => {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
@@ -550,20 +604,26 @@ const CustomActivityTooltip = ({ active, payload, fmt }) => {
   if (!active || !payload?.length || !payload[0]?.payload) return null;
   const data = payload[0].payload;
 
+  const dateLine = data?.date ? fmtTooltipDate(data.date) : (data.label || data.name || '');
+
   return (
     <div className="bg-zinc-900 border border-white/20 p-3 rounded shadow-2xl backdrop-blur-md">
-      <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">
-        {data.label || data.name}
+      <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1 whitespace-nowrap">
+        {dateLine}
       </p>
+
+      <div className="h-[1px] bg-white/10 w-full mb-2" />
+
       <div className="flex items-center justify-between gap-4">
         <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">
           Monto:
         </span>
         <span className="text-white font-black">{fmt(data.total ?? data.val ?? 0)}</span>
       </div>
+
       <div className="flex items-center justify-between gap-4">
         <span className="text-white/80 text-[11px] font-bold uppercase tracking-tight">
-          Ventas:
+          Operaciones:
         </span>
         <span className="text-white font-black">{data.count ?? 0}</span>
       </div>
@@ -598,16 +658,19 @@ const CustomPieTooltip = ({ active, payload, fmt, totalRevenue }) => {
     </div>
   );
 };
-// --- APP PRINCIPAL ---
 export default function App() {
   const [rawData, setRawData] = useState([]);
   const [targetBimestral, setTargetBimestral] = useState(58000000);
   const [customLogo, setCustomLogo] = useState(DEFAULT_LOGO_URL);
   const [activeIndex, setActiveIndex] = useState(null);
   const [expandedSeller, setExpandedSeller] = useState(null);
+
+  // ✅ PROM. DIARIO (PERIODO): top 3 picos
+  const [showTopPicos, setShowTopPicos] = useState(false);
+
   const toggleSeller = (name) => {
-  setExpandedSeller((prev) => (prev === name ? null : name));
-};
+    setExpandedSeller((prev) => (prev === name ? null : name));
+  };
 
   // banners UI (schema check / errores)
   const [banner, setBanner] = useState(null);
@@ -817,7 +880,7 @@ export default function App() {
 
       uniqueRawSellersSet.add(c.seller);
 
-      // ✅ personKey prefer DNI, fallback email (email puede tener errores, pero sirve de backup)
+      // ✅ personKey prefer DNI, fallback email
       const personKey = c.dni ? `dni:${c.dni}` : c.email ? `email:${c.email}` : '';
       if (personKey) {
         if (!personProducts.has(personKey)) personProducts.set(personKey, new Set());
@@ -949,8 +1012,10 @@ export default function App() {
           })
           .sort((a, b) => a.date - b.date);
 
+        // ✅ trend con axis + date (para XAxis y tooltip)
         const trend = trendRaw.map((t) => ({
-          name: fmtDayShort.format(t.date),
+          date: t.date,
+          axis: fmtAxisDate(t.date),
           val: t.val,
           count: t.count,
         }));
@@ -979,11 +1044,17 @@ export default function App() {
       multiProductCustomers,
     } = baseAgg;
 
+    // ✅ timelineData: axis + date
     const timelineData = Object.entries(timelineByDayKey)
       .map(([dayKey, v]) => {
         const [yy, mm, dd] = dayKey.split('-').map(Number);
         const dt = new Date(yy, mm - 1, dd, 12, 0, 0);
-        return { name: fmtDayShort.format(dt), val: v.val, count: v.count, date: dt };
+        return {
+          date: dt,
+          axis: fmtAxisDate(dt),
+          val: v.val,
+          count: v.count,
+        };
       })
       .sort((a, b) => a.date - b.date);
 
@@ -999,15 +1070,12 @@ export default function App() {
       const dayKey = toDayKeyLocal(d);
       const entry = activityByDayKey[dayKey];
 
-      const dateKey = fmtDayKeyDDMM.format(d);
-      const fullDateLabel = fmtFullDayLabel.format(d);
-
       const total = entry ? entry.total : 0;
       const count = entry ? entry.count : 0;
 
       activityTimeline.push({
-        name: dateKey,
-        label: fullDateLabel,
+        date: d,
+        axis: fmtAxisDate(d),
         total,
         count,
         isZero: total === 0,
@@ -1038,7 +1106,6 @@ export default function App() {
       facturacionPorGarantizar,
       promDiarioPeriodo,
       activeDays,
-      // ✅ multi-producto
       uniqueCustomersCount,
       multiProductCustomers,
     };
@@ -1046,17 +1113,20 @@ export default function App() {
 
   const fmt = (v) => fmtCurrency.format(v);
 
-  const getProductRankingStyle = (index) => {
-    if (index === 0) return { color: 'text-[#d4ff00]', shadow: 'drop-shadow-[0_0_7px_rgba(212,255,0,0.35)]', iconColor: 'text-[#d4ff00]' };
-    if (index === 1) return { color: 'text-[#d4ff00]/75', shadow: 'drop-shadow-[0_0_4px_rgba(212,255,0,0.18)]', iconColor: 'text-[#d4ff00]/75' };
-    if (index === 2) return { color: 'text-[#d4ff00]/55', shadow: '', iconColor: 'text-[#d4ff00]/55' };
-    return { color: 'text-white/70', shadow: '', iconColor: 'text-white/70' };
-  };
+  // ✅ Top 3 picos (para card PROM. DIARIO)
+  const top3Picos = useMemo(() => {
+    if (!audit?.activityTimeline?.length) return [];
+    return audit.activityTimeline
+      .filter((x) => (x.total || 0) > 0)
+      .slice()
+      .sort((a, b) => (b.total || 0) - (a.total || 0))
+      .slice(0, 3);
+  }, [audit]);
 
   // progreso meta basado en INGRESOS ASEGURADOS
   const metaBase = audit?.facturacionGarantizada ?? 0;
   const metaPct = targetBimestral > 0 ? (metaBase / targetBimestral) * 100 : 0;
-    return (
+  return (
     <div className={`min-h-screen ${BG_PURE_BLACK} text-white font-sans selection:bg-[#d4ff00] selection:text-black pb-20`}>
       {(loading || isPending) && (
         <div className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm flex items-center justify-center">
@@ -1164,7 +1234,6 @@ export default function App() {
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold mb-1">FACTURACIÓN TOTAL</p>
                   <div className="flex items-baseline gap-2">
-                    {/* ✅ menos brillante */}
                     <span className="text-xl font-bold text-[#b8df00]/55">$</span>
                     <AnimatedNumber value={audit.totalRevenue} />
                   </div>
@@ -1183,14 +1252,18 @@ export default function App() {
                 </div>
               </GlowCard>
 
+              {/* ✅ Inscripciones Totales — pill GARANTIZADAS mejorada */}
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52 relative">
                 <div className="flex justify-between items-start">
                   <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
                     <Database className="w-5 h-5 text-[#d4ff00]" />
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 border border-white/8 bg-white/5 rounded-full">
-                    <div className="w-1 h-1 rounded-full bg-[#d4ff00] animate-pulse" />
-                    <span className="text-[8px] font-black text-white/70 tracking-[0.1em] uppercase">{audit.guaranteedCount} GARANTIZADAS</span>
+
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#d4ff00] animate-pulse shrink-0" />
+                    <span className="text-[9px] leading-none font-black text-white/75 tracking-[0.12em] uppercase whitespace-nowrap">
+                      {audit.guaranteedCount} GARANTIZADAS
+                    </span>
                   </div>
                 </div>
                 <div>
@@ -1234,149 +1307,220 @@ export default function App() {
                 </div>
               </GlowCard>
             </div>
+{/* SECCIÓN: Estado de Facturación Garantizada + multi-producto */}
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-            {/* SECCIÓN: Estado de Facturación Garantizada + multi-producto */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
-                <div className="flex justify-between items-start">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">FACTURACIÓN GARANTIZADA</p>
-                  <span className="text-2xl font-bold text-[#d4ff00]/85 tracking-tighter">
-                    {audit.totalRevenue > 0 ? ((audit.facturacionGarantizada / audit.totalRevenue) * 100).toFixed(1) : '0.0'}%
-                  </span>
-                </div>
-                <div>
-                  <div className="text-4xl font-bold text-[#d4ff00]/85 tracking-tighter mb-2">
-                    {fmt(audit.facturacionGarantizada)}
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
-                    <div
-                      className="bg-[#d4ff00] h-full shadow-[0_0_10px_rgba(212,255,0,0.22)] transition-all"
-                      style={{
-                        width: `${audit.totalRevenue > 0 ? (audit.facturacionGarantizada / audit.totalRevenue) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="text-[9px] text-white/40 mt-3 font-bold tracking-widest uppercase">INGRESOS ASEGURADOS</p>
-                </div>
-              </GlowCard>
+  {/* FACTURACIÓN GARANTIZADA */}
+  <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
+    <div className="flex justify-between items-start">
+      <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">
+        FACTURACIÓN GARANTIZADA
+      </p>
 
-              <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
-                <div className="flex justify-between items-start">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">FACTURACIÓN POR GARANTIZAR</p>
-                  <span className="text-2xl font-bold text-white/35 tracking-tighter">
-                    {audit.totalRevenue > 0 ? ((audit.facturacionPorGarantizar / audit.totalRevenue) * 100).toFixed(1) : '0.0'}%
-                  </span>
-                </div>
-                <div>
-                  <div className="text-4xl font-bold text-white tracking-tighter mb-2">
-                    {fmt(audit.facturacionPorGarantizar)}
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
-                    <div
-                      className="bg-white/35 h-full transition-all"
-                      style={{
-                        width: `${audit.totalRevenue > 0 ? (audit.facturacionPorGarantizar / audit.totalRevenue) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center mt-3">
-                    <p className="text-[9px] text-white/40 font-bold tracking-widest uppercase">EN PROCESO</p>
-                  </div>
-                </div>
-              </GlowCard>
+      <div className="flex flex-col items-end leading-none">
+        <span className="text-2xl font-bold text-[#d4ff00]/85 tracking-tighter">
+          {audit.totalRevenue > 0
+            ? ((audit.facturacionGarantizada / audit.totalRevenue) * 100).toFixed(1)
+            : '0.0'}%
+        </span>
 
-              {/* ✅ CLIENTES EN +1 PRODUCTO (sin barra, mejor distribuida) */}
-              <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
-                <div className="flex items-start justify-between">
-                  <p className="text-[10px] uppercase tracking-[0.28em] text-white/75 font-bold">
-                    CLIENTES EN +1 PRODUCTO
-                  </p>
+        <span className="mt-1 text-[10px] font-black text-white/55 tracking-widest uppercase whitespace-nowrap">
+          {audit.guaranteedCount} insc.
+        </span>
+      </div>
+    </div>
 
-                  <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-white/70" />
-                  </div>
-                </div>
+    <div>
+      <div className="text-4xl font-bold text-[#d4ff00]/85 tracking-tighter mb-2">
+        {fmt(audit.facturacionGarantizada)}
+      </div>
 
-                <div className="flex items-end justify-between gap-8">
-                  <div className="flex-1">
-                    <div className="text-[9px] text-white/45 font-black uppercase tracking-widest mb-2">
-                      Repetidos
-                    </div>
-                    <div className="text-6xl font-black tracking-tighter text-white leading-none">
-                      {fmtNumberAR.format(audit.multiProductCustomers || 0)}
-                    </div>
-                  </div>
+      <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
+        <div
+          className="bg-[#d4ff00] h-full shadow-[0_0_10px_rgba(212,255,0,0.22)] transition-all"
+          style={{
+            width: `${
+              audit.totalRevenue > 0
+                ? (audit.facturacionGarantizada / audit.totalRevenue) * 100
+                : 0
+            }%`,
+          }}
+        />
+      </div>
 
-                  <div className="w-px h-16 bg-white/5" />
+      <p className="text-[9px] text-white/40 mt-3 font-bold tracking-widest uppercase">
+        INGRESOS ASEGURADOS
+      </p>
+    </div>
+  </GlowCard>
 
-                  <div className="flex-1 text-right">
-                    <div className="text-[9px] text-white/45 font-black uppercase tracking-widest mb-2">
-                      Total clientes
-                    </div>
-                    <div className="text-3xl font-black tracking-tight text-white/85 leading-none">
-                      {fmtNumberAR.format(audit.uniqueCustomersCount || 0)}
-                    </div>
+  {/* FACTURACIÓN POR GARANTIZAR */}
+  <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
+    <div className="flex justify-between items-start">
+      <p className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-bold">
+        FACTURACIÓN POR GARANTIZAR
+      </p>
 
-                    <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-white/45">
-                      Tasa{' '}
-                      <span className="text-[#b8df00]/80">
-                        {(
-                          (audit.uniqueCustomersCount || 0) > 0
-                            ? ((audit.multiProductCustomers || 0) / audit.uniqueCustomersCount) * 100
-                            : 0
-                        ).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
+      <div className="flex flex-col items-end leading-none">
+        <span className="text-2xl font-bold text-white/35 tracking-tighter">
+          {audit.totalRevenue > 0
+            ? ((audit.facturacionPorGarantizar / audit.totalRevenue) * 100).toFixed(1)
+            : '0.0'}%
+        </span>
 
-                <p className="text-[9px] text-white/35 mt-4 font-bold tracking-widest uppercase">
-                  Personas repetidas en productos distintos
-                </p>
-              </GlowCard>
-            </div>
+        <span className="mt-1 text-[10px] font-black text-white/45 tracking-widest uppercase whitespace-nowrap">
+          {(audit.totalCount || 0) - (audit.guaranteedCount || 0)} insc.
+        </span>
+      </div>
+    </div>
 
-            {/* Actividad Diaria */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-[#0a0a0a] border border-white/5 p-8 rounded-[2.5rem]">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Calendar className="w-4 h-4 text-[#d4ff00]" />
-                      <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Actividad Diaria</h3>
-                    </div>
-                    <p className="text-[10px] uppercase tracking-widest text-white/80 font-bold">
-                      Intensidad de volumen • Últimos 30 días
-                    </p>
-                  </div>
-                </div>
+    <div>
+      <div className="text-4xl font-bold text-white tracking-tighter mb-2">
+        {fmt(audit.facturacionPorGarantizar)}
+      </div>
 
-                <div className="h-[220px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={audit.activityTimeline} margin={{ bottom: 20 }}>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 9 }} interval={2} />
-                      <Tooltip cursor={{ fill: 'rgba(212, 255, 0, 0.04)' }} content={<CustomActivityTooltip fmt={fmt} />} />
-                      <Bar dataKey="total" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                        {audit.activityTimeline.map((entry, index) => {
-                          const intensity = entry.isZero ? 0.07 : 0.22 + (entry.total / audit.maxActivityVal) * 0.72;
-                          return <Cell key={`cell-${index}`} fill={LIME_NEON} opacity={intensity} />;
-                        })}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+      <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
+        <div
+          className="bg-white/35 h-full transition-all"
+          style={{
+            width: `${
+              audit.totalRevenue > 0
+                ? (audit.facturacionPorGarantizar / audit.totalRevenue) * 100
+                : 0
+            }%`,
+          }}
+        />
+      </div>
 
-              <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-white/5 p-8 rounded-[2.5rem] flex flex-col justify-center text-center">
-                <div className="w-16 h-16 bg-[#d4ff00]/5 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                  <BarChart3 className="w-8 h-8 text-[#d4ff00]" />
-                </div>
-                <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.4em] mb-2">PROM. DIARIO (PERIODO)</p>
-                <div className="text-4xl font-bold tracking-tighter mb-2">{fmt(audit.promDiarioPeriodo)}</div>
-                <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest">{audit.activeDays} días con actividad</p>
-              </div>
-            </div>
+      <p className="text-[9px] text-white/40 mt-3 font-bold tracking-widest uppercase">
+        EN PROCESO
+      </p>
+    </div>
+  </GlowCard>
 
+  {/* CLIENTES EN +1 PRODUCTO */}
+  <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2.5rem] flex flex-col justify-between h-48">
+    <div className="flex items-start justify-between">
+      <p className="text-[10px] uppercase tracking-[0.28em] text-white/75 font-bold">
+        CLIENTES EN +1 PRODUCTO
+      </p>
+
+      <div className="w-10 h-10 rounded-xl bg-[#141414] border border-white/5 flex items-center justify-center">
+        <Users className="w-5 h-5 text-white/70" />
+      </div>
+    </div>
+
+    <div className="flex items-end justify-between gap-8">
+      <div className="flex-1">
+        <div className="text-[9px] text-white/45 font-black uppercase tracking-widest mb-2">
+          Repetidos
+        </div>
+        <div className="text-6xl font-black tracking-tighter text-white leading-none">
+          {fmtNumberAR.format(audit.multiProductCustomers || 0)}
+        </div>
+      </div>
+
+      <div className="w-px h-16 bg-white/5" />
+
+      <div className="flex-1 text-right">
+        <div className="text-[9px] text-white/45 font-black uppercase tracking-widest mb-2">
+          Total clientes
+        </div>
+
+        <div className="text-3xl font-black tracking-tight text-white/85 leading-none">
+          {fmtNumberAR.format(audit.uniqueCustomersCount || 0)}
+        </div>
+
+        <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-white/45">
+          Tasa{' '}
+          <span className="text-[#b8df00]/80">
+            {(
+              (audit.uniqueCustomersCount || 0) > 0
+                ? ((audit.multiProductCustomers || 0) /
+                    audit.uniqueCustomersCount) *
+                  100
+                : 0
+            ).toFixed(1)}
+            %
+          </span>
+        </div>
+      </div>
+    </div>
+  </GlowCard>
+</div>
+
+{/* ACTIVIDAD DIARIA + PROMEDIO */}
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  {/* ACTIVIDAD DIARIA */}
+  <div className="lg:col-span-2 bg-[#0a0a0a] border border-white/5 p-8 rounded-[2.5rem]">
+    <div className="flex items-center justify-between mb-8">
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Calendar className="w-4 h-4 text-[#d4ff00]" />
+          <h3 className="text-xl font-bold text-white uppercase tracking-tighter">
+            Actividad Diaria
+          </h3>
+        </div>
+        <p className="text-[10px] uppercase tracking-widest text-white/80 font-bold">
+          Intensidad de volumen • Últimos 30 días
+        </p>
+      </div>
+    </div>
+
+    <div className="h-[220px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={audit.activityTimeline} margin={{ bottom: 20 }}>
+          <XAxis
+            dataKey="name"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#888', fontSize: 9 }}
+            interval={2}
+          />
+          <Tooltip
+            cursor={{ fill: 'rgba(212,255,0,0.04)' }}
+            content={<CustomActivityTooltip fmt={fmt} />}
+          />
+          <Bar dataKey="total" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+            {audit.activityTimeline.map((entry, index) => {
+              const intensity = entry.isZero
+                ? 0.07
+                : 0.22 + (entry.total / audit.maxActivityVal) * 0.72;
+
+              return (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={LIME_NEON}
+                  opacity={intensity}
+                />
+              );
+            })}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  </div>
+
+  {/* PROM. DIARIO (SIN DESPLEGABLE) */}
+  <div className="bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-white/5 p-8 rounded-[2.5rem] flex flex-col justify-center text-center">
+    <div className="w-16 h-16 bg-[#d4ff00]/5 rounded-2xl flex items-center justify-center mx-auto mb-6">
+      <BarChart3 className="w-8 h-8 text-[#d4ff00]" />
+    </div>
+
+    <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.4em] mb-2">
+      PROM. DIARIO (PERIODO)
+    </p>
+
+    <div className="text-4xl font-bold tracking-tighter mb-2">
+      {fmt(audit.promDiarioPeriodo)}
+    </div>
+
+    <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest">
+      {audit.activeDays} días con actividad
+    </p>
+  </div>
+</div>
             {/* Evolución Temporal */}
             <div className={`${CARD_DARK} border border-white/5 p-8 rounded-[2.5rem]`}>
               <div className="flex items-center gap-2 mb-1">
@@ -1384,6 +1528,7 @@ export default function App() {
                 <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Evolución Diaria</h3>
               </div>
               <p className="text-[10px] uppercase tracking-widest text-white/80 font-bold mb-8">Tendencia de ingresos acumulados</p>
+
               <div className="h-[350px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={audit.timelineData}>
@@ -1393,13 +1538,26 @@ export default function App() {
                         <stop offset="95%" stopColor={LIME_NEON} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 10 }} />
+
+                    {/* ✅ Eje X: 13-ene */}
+                    <XAxis dataKey="axis" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 10 }} />
                     <YAxis hide />
+
+                    {/* ✅ Tooltip: Miércoles 19-02 */}
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px' }}
-                      formatter={(v) => [fmt(v), 'Ingresos']}
+                      content={<CustomActivityTooltip fmt={fmt} />}
+                      cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }}
                     />
-                    <Area type="monotone" dataKey="val" stroke={LIME_NEON} fillOpacity={1} fill="url(#colorVal)" strokeWidth={3} isAnimationActive={false} />
+
+                    <Area
+                      type="monotone"
+                      dataKey="val"
+                      stroke={LIME_NEON}
+                      fillOpacity={1}
+                      fill="url(#colorVal)"
+                      strokeWidth={3}
+                      isAnimationActive={false}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -1484,34 +1642,48 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Top 3 List (Productos) */}
+              {/* Top 3 List (Productos) — ✅ colores + watermark pro */}
               <div className="lg:col-span-5 grid grid-cols-1 gap-4">
                 {audit.top3Products.map((p, i) => {
                   const style = getProductRankingStyle(i);
                   const isAbbrev = String(p.name || '').endsWith('...');
+
                   return (
                     <div
                       key={p.fullName}
                       className="bg-[#0a0a0a] p-6 rounded-[2rem] flex items-center justify-between group h-[95px] relative overflow-hidden transition-all hover:bg-white/[0.03]"
                     >
-                      <div className="absolute -right-4 -bottom-4 opacity-[0.07] group-hover:opacity-[0.18] transition-opacity pointer-events-none -rotate-12">
-                        <Trophy size={110} strokeWidth={1} className="text-white/30 group-hover:text-white/40 transition-colors" />
+                      {/* ✅ watermark copa pro más notoria */}
+                      <div className="absolute -right-6 -bottom-6 opacity-[0.12] group-hover:opacity-[0.24] transition-opacity pointer-events-none -rotate-12">
+                        <TrophyMark className="w-[140px] h-[140px] text-white/40" />
                       </div>
 
                       <div className="flex items-center gap-5 relative z-10 min-w-0 flex-1">
                         <div className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-black/60 transition-all duration-500">
-                          {i === 0 ? <Trophy className={style.iconColor} size={24} /> : i === 1 ? <Award className={style.iconColor} size={24} /> : <Target className={style.iconColor} size={24} />}
+                          {i === 0 ? (
+                            <Trophy className={style.iconColor} size={24} />
+                          ) : i === 1 ? (
+                            <Award className={style.iconColor} size={24} />
+                          ) : (
+                            <Target className={style.iconColor} size={24} />
+                          )}
                         </div>
 
                         <div className="flex flex-col min-w-0">
                           {isAbbrev ? (
                             <InstantTooltip text={p.fullName}>
-                              <span className={`text-[12px] font-black uppercase tracking-wider ${style.color} ${style.shadow} truncate max-w-[150px] cursor-help`} title={p.fullName}>
+                              <span
+                                className={`text-[12px] font-black uppercase tracking-wider ${style.color} ${style.shadow} truncate max-w-[180px] cursor-help`}
+                                title={p.fullName}
+                              >
                                 {p.name}
                               </span>
                             </InstantTooltip>
                           ) : (
-                            <span className={`text-[12px] font-black uppercase tracking-wider ${style.color} ${style.shadow} truncate max-w-[150px]`} title={p.fullName}>
+                            <span
+                              className={`text-[12px] font-black uppercase tracking-wider ${style.color} ${style.shadow} truncate max-w-[180px]`}
+                              title={p.fullName}
+                            >
                               {p.name}
                             </span>
                           )}
@@ -1520,204 +1692,206 @@ export default function App() {
                       </div>
 
                       <div className="text-right z-10">
-                        <div className="text-xl font-black text-white tracking-tighter">{fmt(p.value)}</div>
+                        <div className={`text-xl font-black tracking-tighter ${style.amountColor || 'text-white'}`}>
+                          {fmt(p.value)}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
             </div>
+            {/* SECCIÓN: Rendimiento por Vendedor */}
+            <div className="mt-10 pt-10 border-t border-white/10">
+              <div className="flex items-center gap-2 mb-8">
+                <User className="w-5 h-5 text-[#d4ff00]" />
+                <h3 className="text-2xl font-bold text-white uppercase tracking-tighter">Ranking de Asesores</h3>
 
-           {/* SECCIÓN: Rendimiento por Vendedor (Ranking v1 + Expand + Glow TOP3 + Copa) */}
-<div className="mt-10 pt-10 border-t border-white/10">
-  <div className="flex items-center gap-2 mb-8">
-    <User className="w-5 h-5 text-[#d4ff00]" />
-    <h3 className="text-2xl font-bold text-white uppercase tracking-tighter">Ranking de Asesores</h3>
-
-    <div className="ml-auto flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5">
-      <span className="text-[9px] font-black uppercase tracking-widest text-white/60">
-        {audit?.sellers?.length ?? 0} agentes
-      </span>
-    </div>
-  </div>
-
-  <div className="space-y-4">
-    {audit.sellers.map((s, i) => {
-      const style = getSellerRankingStyle(i);
-      const isOpen = expandedSeller === s.name;
-      const sharePct = audit.totalRevenue > 0 ? (s.val / audit.totalRevenue) * 100 : 0;
-
-      return (
-        <div key={s.name} className="rounded-[2rem] overflow-hidden relative">
-          {/* ===== ROW COMPACTA (colapsado) ===== */}
-          <button
-            type="button"
-            onClick={() => toggleSeller(s.name)}
-            className="relative w-full text-left group bg-[#0a0a0a] rounded-[2rem] px-6 py-5 transition-all duration-300 hover:bg-white/[0.02]"
-          >
-            {/* Copa (colapsado: arriba/derecha, inclinada a la izquierda) */}
-            <div
-              className={`pointer-events-none absolute right-[-18px] top-[-22px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
-                ${isOpen ? 'opacity-0 translate-y-10 rotate-[12deg]' : 'opacity-[0.12] translate-y-0 -rotate-[12deg]'}
-              `}
-            >
-              <Trophy size={150} strokeWidth={1} className="text-white/35" />
-            </div>
-
-            <div className="flex items-center gap-5">
-              {/* Rank + Nombre */}
-              <div className="shrink-0 flex items-center gap-4 min-w-[260px]">
-                {/* Número con cajita oscura + destello TOP 3 */}
-                <div className={`shrink-0 ${style.rankBox} ${style.rankGlow}`}>
-                  <span className={`${style.rankText} ${style.rankTextColor}`}>{i + 1}</span>
-                </div>
-
-                <div className="min-w-0">
-                  <div className="text-[12px] font-black uppercase tracking-wider text-white truncate max-w-[220px]">
-                    {s.name}
-                  </div>
+                <div className="ml-auto flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-white/60">
+                    {audit?.sellers?.length ?? 0} agentes
+                  </span>
                 </div>
               </div>
 
-              {/* Sparkline (muy opaca en idle, brillante en hover) */}
-              <div
-                className={`flex-1 min-w-[220px] h-[42px] origin-left transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
-                  ${isOpen ? 'opacity-0 translate-y-4 scale-[1.12]' : 'opacity-25 group-hover:opacity-95 translate-y-0 scale-100'}
-                `}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={s.trend}>
-                    <Line
-                      type="monotone"
-                      dataKey="val"
-                      stroke={LIME_NEON}
-                      strokeWidth={2}
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <div className="space-y-4">
+                {audit.sellers.map((s, i) => {
+                  const style = getSellerRankingStyle(i);
+                  const isOpen = expandedSeller === s.name;
+                  const sharePct = audit.totalRevenue > 0 ? (s.val / audit.totalRevenue) * 100 : 0;
 
-              {/* Share */}
-              <div className="hidden md:flex flex-col items-end min-w-[110px]">
-                <div className="text-[9px] font-black uppercase tracking-widest text-white/35">Share</div>
-                <div className="text-[14px] font-black tracking-tight text-[#d4ff00]/90">
-                  {sharePct.toFixed(1)}%
-                </div>
-              </div>
+                  return (
+                    <div key={s.name} className="rounded-[2rem] overflow-hidden relative">
+                      {/* ===== ROW COMPACTA (colapsado) ===== */}
+                      <button
+                        type="button"
+                        onClick={() => toggleSeller(s.name)}
+                        className="relative w-full text-left group bg-[#0a0a0a] rounded-[2rem] px-6 py-5 transition-all duration-300 hover:bg-white/[0.02]"
+                      >
+                        {/* ✅ watermark copa pro (colapsado) */}
+                        <div
+                          className={`pointer-events-none absolute right-[-20px] top-[-26px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
+                            ${isOpen ? 'opacity-0 translate-y-10 rotate-[12deg]' : 'opacity-[0.14] translate-y-0 -rotate-[12deg]'}
+                          `}
+                        >
+                          <TrophyMark className="w-[170px] h-[170px] text-white/35" />
+                        </div>
 
-              {/* Total */}
-              <div className="ml-auto flex flex-col items-end min-w-[190px]">
-                <div className="text-[9px] font-black uppercase tracking-widest text-white/35">
-                  {s.count} ventas
-                </div>
-                <div className={`${style.amountText} ${style.amountColor}`}>{fmt(s.val)}</div>
-              </div>
-            </div>
-          </button>
+                        <div className="flex items-center gap-5">
+                          {/* Rank + Nombre */}
+                          <div className="shrink-0 flex items-center gap-4 min-w-[260px]">
+                            <div className={`shrink-0 ${style.rankBox} ${style.rankGlow}`}>
+                              <span className={`${style.rankText} ${style.rankTextColor}`}>{i + 1}</span>
+                            </div>
 
-          {/* ===== EXPANDIDO (sin bordes internos) ===== */}
-          <div
-            className={`overflow-hidden transition-[max-height,opacity] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]
-              ${isOpen ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0'}
-            `}
-          >
-            <div className="px-6 pt-5 pb-6 relative">
-              {/* Métricas (más destacadas) */}
-              <div
-                className={`grid grid-cols-1 md:grid-cols-2 gap-10 mb-6 transition-all duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]
-                  ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}
-                `}
-              >
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/35 mb-2">
-                    Promedio diario
-                  </div>
-                  <div className="text-[22px] font-black tracking-tight text-white leading-none">
-                    {fmt(s.promDia)}
-                  </div>
-                </div>
+                            <div className="min-w-0">
+                              <div className="text-[12px] font-black uppercase tracking-wider text-white truncate max-w-[240px]">
+                                {s.name}
+                              </div>
+                            </div>
+                          </div>
 
-                <div className="md:text-right">
-                  <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/35 mb-2">
-                    Garantizado ({s.garantizadas} est.)
-                      </div>
-                      <div className="text-[22px] font-black tracking-tight text-white leading-none">
-                        {fmt(s.facturacionGarantizada)}
+                          {/* Sparkline */}
+                          <div
+                            className={`flex-1 min-w-[220px] h-[42px] origin-left transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
+                              ${isOpen ? 'opacity-0 translate-y-4 scale-[1.12]' : 'opacity-25 group-hover:opacity-95 translate-y-0 scale-100'}
+                            `}
+                          >
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={s.trend}>
+                                <Line
+                                  type="monotone"
+                                  dataKey="val"
+                                  stroke={LIME_NEON}
+                                  strokeWidth={2}
+                                  dot={false}
+                                  isAnimationActive={false}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Share */}
+                          <div className="hidden md:flex flex-col items-end min-w-[110px]">
+                            <div className="text-[9px] font-black uppercase tracking-widest text-white/35">Share</div>
+                            <div className="text-[14px] font-black tracking-tight text-[#d4ff00]/90">
+                              {sharePct.toFixed(1)}%
+                            </div>
+                          </div>
+
+                          {/* Total */}
+                          <div className="ml-auto flex flex-col items-end min-w-[190px]">
+                            <div className="text-[9px] font-black uppercase tracking-widest text-white/35">
+                              {s.count} ventas
+                            </div>
+                            <div className={`${style.amountText} ${style.amountColor} ${style.amountGlow || ''}`}>
+                              {fmt(s.val)}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* ===== EXPANDIDO ===== */}
+                      <div
+                        className={`overflow-hidden transition-[max-height,opacity] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]
+                          ${isOpen ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0'}
+                        `}
+                      >
+                        <div className="px-6 pt-5 pb-6 relative">
+                          <div
+                            className={`grid grid-cols-1 md:grid-cols-2 gap-10 mb-6 transition-all duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]
+                              ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}
+                            `}
+                          >
+                            <div>
+                              <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/35 mb-2">
+                                Promedio diario
+                              </div>
+                              <div className="text-[22px] font-black tracking-tight text-white leading-none">
+                                {fmt(s.promDia)}
+                              </div>
+                            </div>
+
+                            <div className="md:text-right">
+                              <div className="text-[10px] font-black uppercase tracking-[0.45em] text-white/35 mb-2">
+                                Garantizado ({s.garantizadas} est.)
+                              </div>
+                              <div className="text-[22px] font-black tracking-tight text-white leading-none">
+                                {fmt(s.facturacionGarantizada)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`text-center mb-3 transition-all duration-400 delay-75 ease-[cubic-bezier(0.22,1,0.36,1)]
+                              ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
+                            `}
+                          >
+                            <div className="text-[10px] font-black uppercase tracking-[0.55em] text-white/30">
+                              Evolución de ventas
+                            </div>
+                          </div>
+
+                          <div
+                            className={`relative w-full transition-all duration-500 delay-100 ease-[cubic-bezier(0.22,1,0.36,1)]
+                              ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}
+                            `}
+                          >
+                            {/* ✅ watermark copa pro (expandido) */}
+                            <div
+                              className={`pointer-events-none absolute right-[-26px] bottom-[-30px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
+                                ${isOpen ? 'opacity-[0.14] translate-y-0 rotate-[12deg]' : 'opacity-0 translate-y-[-14px] rotate-[12deg]'}
+                              `}
+                            >
+                              <TrophyMark className="w-[240px] h-[240px] text-white/35" />
+                            </div>
+
+                            <div className="h-[250px] w-full">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={s.trend} margin={{ left: 8, right: 8, top: 10, bottom: 8 }}>
+                                  <defs>
+                                    <linearGradient id={`sellerDetail-${i}`} x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.32} />
+                                      <stop offset="95%" stopColor={LIME_NEON} stopOpacity={0} />
+                                    </linearGradient>
+                                  </defs>
+
+                                  {/* ✅ Eje X: 13-ene */}
+                                  <XAxis
+                                    dataKey="axis"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#777', fontSize: 10 }}
+                                    minTickGap={18}
+                                  />
+                                  <YAxis hide />
+
+                                  {/* ✅ Tooltip: Miércoles 19-02 */}
+                                  <Tooltip
+                                    content={<CustomActivityTooltip fmt={fmt} />}
+                                    cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }}
+                                  />
+
+                                  <Area
+                                    type="monotone"
+                                    dataKey="val"
+                                    stroke={LIME_NEON}
+                                    fillOpacity={1}
+                                    fill={`url(#sellerDetail-${i})`}
+                                    strokeWidth={2}
+                                    isAnimationActive={false}
+                                  />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-              </div
-              >
-              {/* Título */}
-              <div
-                className={`text-center mb-3 transition-all duration-400 delay-75 ease-[cubic-bezier(0.22,1,0.36,1)]
-                  ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
-                `}
-              >
-                <div className="text-[10px] font-black uppercase tracking-[0.55em] text-white/30">
-                  Evolución de ventas
-                </div>
-              </div>
-
-              {/* Gráfico grande + copa (expandido: abajo/derecha, inclinada a la derecha) */}
-              <div
-                className={`relative w-full transition-all duration-500 delay-100 ease-[cubic-bezier(0.22,1,0.36,1)]
-                  ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}
-                `}
-              >
-                <div
-                  className={`pointer-events-none absolute right-[-22px] bottom-[-26px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
-                    ${isOpen ? 'opacity-[0.12] translate-y-0 rotate-[12deg]' : 'opacity-0 translate-y-[-14px] rotate-[12deg]'}
-                  `}
-                >
-                  <Trophy size={210} strokeWidth={1} className="text-white/35" />
-                </div>
-
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={s.trend} margin={{ left: 8, right: 8, top: 10, bottom: 8 }}>
-                      <defs>
-                        <linearGradient id={`sellerDetail-${i}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={LIME_NEON} stopOpacity={0.32} />
-                          <stop offset="95%" stopColor={LIME_NEON} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-
-                      <XAxis
-                        dataKey="name"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: '#777', fontSize: 10 }}
-                        minTickGap={18}
-                      />
-                      <YAxis hide />
-
-                      <Tooltip
-                        content={<CustomActivityTooltip fmt={fmt} />}
-                        cursor={{ fill: 'rgba(212, 255, 0, 0.05)' }}
-                      />
-
-                      <Area
-                        type="monotone"
-                        dataKey="val"
-                        stroke={LIME_NEON}
-                        fillOpacity={1}
-                        fill={`url(#sellerDetail-${i})`}
-                        strokeWidth={2}
-                        isAnimationActive={false}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                  );
+                })}
               </div>
             </div>
-          </div>
-        </div>
-      );
-    })}
-  </div>
-</div>
 
           </div>
         )}
