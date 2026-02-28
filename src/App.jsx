@@ -1493,14 +1493,23 @@ export default function App() {
       />
 
       <Bar dataKey="total" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-        {(audit.activityTimeline || []).map((entry, index) => {
-          const max = audit.maxActivityVal || 1;
-          const intensity =
-            entry.total <= 0 ? 0.12 : 0.22 + (entry.total / max) * 0.72;
+  {(audit.activityTimeline || []).map((entry, index) => {
+    const total = Number(entry?.total || 0);
+    const max = Math.max(1, Number(audit?.maxActivityVal || 1));
 
-          return <Cell key={`cell-${index}`} fill={LIME_NEON} opacity={intensity} />;
-        })}
-      </Bar>
+    // siempre visible: base 0.28, sube con intensidad hasta 0.95
+    const t = Math.min(1, Math.max(0, total / max));
+    const opacity = total <= 0 ? 0.12 : 0.28 + t * 0.67;
+
+    return (
+      <Cell
+        key={`cell-${index}`}
+        fill={LIME_NEON}
+        opacity={opacity}
+      />
+    );
+  })}
+</Bar>
     </BarChart>
   </ResponsiveContainer>
 </div>
