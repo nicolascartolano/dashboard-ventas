@@ -1468,38 +1468,42 @@ export default function App() {
       </div>
     </div>
 
-    <div className="h-[220px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={audit.activityTimeline} margin={{ bottom: 20 }}>
-          <XAxis
-            dataKey="name"
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: '#888', fontSize: 9 }}
-            interval={2}
-          />
-          <Tooltip
-            cursor={{ fill: 'rgba(212,255,0,0.04)' }}
-            content={<CustomActivityTooltip fmt={fmt} />}
-          />
-          <Bar dataKey="total" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-            {audit.activityTimeline.map((entry, index) => {
-              const intensity = entry.isZero
-                ? 0.07
-                : 0.22 + (entry.total / audit.maxActivityVal) * 0.72;
-
-              return (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={LIME_NEON}
-                  opacity={intensity}
-                />
-              );
-            })}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+  <div className="h-[220px] w-full relative">
+  {(!audit?.activityTimeline?.length ||
+    !audit.activityTimeline.some((d) => (d.total || 0) > 0)) && (
+    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black uppercase tracking-[0.35em] text-white/35">
+      Sin actividad en los últimos 30 días
     </div>
+  )}
+
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart data={audit.activityTimeline || []} margin={{ bottom: 20 }}>
+      {/* ✅ si en algún momento cambiás el campo, no se rompe */}
+      <XAxis
+        dataKey={(d) => d.axis ?? d.name}
+        axisLine={false}
+        tickLine={false}
+        tick={{ fill: '#888', fontSize: 9 }}
+        interval={2}
+      />
+
+      <Tooltip
+        cursor={{ fill: 'rgba(212,255,0,0.04)' }}
+        content={<CustomActivityTooltip fmt={fmt} />}
+      />
+
+      <Bar dataKey="total" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+        {(audit.activityTimeline || []).map((entry, index) => {
+          const max = audit.maxActivityVal || 1;
+          const intensity =
+            entry.total <= 0 ? 0.12 : 0.22 + (entry.total / max) * 0.72;
+
+          return <Cell key={`cell-${index}`} fill={LIME_NEON} opacity={intensity} />;
+        })}
+      </Bar>
+    </BarChart>
+  </ResponsiveContainer>
+</div>
   </div>
 
   {/* PROM. DIARIO (SIN DESPLEGABLE) */}
