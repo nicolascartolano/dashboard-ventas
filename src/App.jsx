@@ -1261,7 +1261,7 @@ export default function App() {
 
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 bg-white/5">
                     <div className="w-1.5 h-1.5 rounded-full bg-[#d4ff00] animate-pulse shrink-0" />
-                    <span className="text-[9px] leading-none font-black text-white/75 tracking-[0.12em] uppercase whitespace-nowrap">
+                    <span className="text-[11px] leading-none font-black text-white/75 tracking-[0.12em] uppercase whitespace-nowrap">
                       {audit.guaranteedCount} GARANTIZADAS
                     </span>
                   </div>
