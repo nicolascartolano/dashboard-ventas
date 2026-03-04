@@ -110,8 +110,74 @@ const normalizeEmail = (v) => {
 const normalizeDNI = (v) => {
   const s = String(v || '').trim();
   if (!s) return '';
-  const digits = s.replace(/\D/g, '');
-  return digits;
+  return s.replace(/\D/g, '');
+};
+
+// --- NORMALIZADOR para comparar etiquetas (sin tildes + upper) ---
+const norm = (v) =>
+  String(v || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+/**
+ * decision:
+ * - includeCount: suma a "bolsa general" (cantidad de alumnos/inscripciones)
+ * - includeRevenue: suma a facturación ($)
+ * - bucket: si includeRevenue=true -> "GARANTIZADA" | "POR_GARANTIZAR"
+ */
+const RULE_MATRIX = {
+  // A garantizar + Esperando ingreso → suma a POR GARANTIZAR (plata aún no cobrada)
+'A GARANTIZAR|ESPERANDO INGRESO': { includeCount: true, includeRevenue: true, bucket: 'POR_GARANTIZAR' },
+
+  // A imputar + Esperando ingreso → SI
+  'A IMPUTAR|ESPERANDO INGRESO': { includeCount: true, includeRevenue: true, bucket: 'GARANTIZADA' },
+
+  // Cambio horario: IGNORAR (NO cuenta ni alumnos ni $)
+  'AL DIA|CAMBIO HORARIO': { includeCount: false, includeRevenue: false },
+
+  // Al día: SI
+  'AL DIA|ESPERANDO INGRESO': { includeCount: true, includeRevenue: true, bucket: 'GARANTIZADA' },
+  'AL DIA|ESTUDIANTE REGULAR': { includeCount: true, includeRevenue: true, bucket: 'GARANTIZADA' },
+
+  // No inició: IGNORAR bolsa general (NO alumnos, NO $) salvo excepción
+  'AL DIA|NO INICIO': { includeCount: false, includeRevenue: false },
+
+  // Bonificado: NO $ pero SI cuenta alumnos
+  'BONIFICADO|ESPERANDO INGRESO': { includeCount: true, includeRevenue: false },
+  'BONIFICADO|ESTUDIANTE REGULAR': { includeCount: true, includeRevenue: false },
+
+  // Garantizado + esperando ingreso → SI
+  'GARANTIZADO|ESPERANDO INGRESO': { includeCount: true, includeRevenue: true, bucket: 'GARANTIZADA' },
+
+ // Pago pendiente + Estudiante regular → suma a POR GARANTIZAR (plata aún no cobrada)
+'PAGO PENDIENTE|ESTUDIANTE REGULAR': { includeCount: true, includeRevenue: true, bucket: 'POR_GARANTIZAR' },
+
+  // Saldo a favor + No inició → SI $ (pero NO alumno)
+  'SALDO A FAVOR|NO INICIO': { includeCount: false, includeRevenue: true, bucket: 'GARANTIZADA' },
+
+  // Todo pago + Esperando ingreso → SI
+  'TODO PAGO|ESPERANDO INGRESO': { includeCount: true, includeRevenue: true, bucket: 'GARANTIZADA' },
+};
+
+// default: si aparece una combinación nueva, por seguridad:
+// cuenta alumno + suma $ como "por garantizar"
+const DEFAULT_RULE = { includeCount: true, includeRevenue: true, bucket: 'POR_GARANTIZAR' };
+
+const classifyRow = (estado, seguimiento) => {
+  try {
+    const e = norm(estado || '');
+    const s = norm(seguimiento || '');
+
+    const key = `${e}|${s}`;
+
+    return RULE_MATRIX[key] || DEFAULT_RULE;
+
+  } catch (err) {
+    console.error("Error clasificando fila:", estado, seguimiento, err);
+    return DEFAULT_RULE;
+  }
 };
 
 /**
@@ -262,9 +328,13 @@ const COL_ALIASES = {
   dni: ['DNI', 'dni', 'Documento', 'documento', 'Nro Documento', 'Nro documento'],
   email: ['Email', 'email', 'Correo', 'correo', 'Mail', 'mail'],
   camada: ['Camada', 'camada', 'Código Camada', 'codigo_camada', 'Cohorte', 'cohorte', 'Cod Camada', 'cod_camada'],
+  seguimiento: ['Seguimiento', 'seguimiento', 'Etiqueta', 'etiqueta'],
 };
 
 const pickFirst = (row, keys) => {
+  // ✅ blindaje: si keys no existe o no es lista, devolvemos vacío
+  if (!Array.isArray(keys) || keys.length === 0) return '';
+
   for (const k of keys) {
     const v = row?.[k];
     if (v != null && String(v).trim() !== '') return v;
@@ -290,6 +360,7 @@ const parseAndNormalizeRow = (row, rowIndex) => {
 
   let seller = pickFirst(row, COL_ALIASES.seller) || 'Sitio Web';
   const estadoRaw = pickFirst(row, COL_ALIASES.estado);
+  const seguimientoRaw = pickFirst(row, COL_ALIASES.seguimiento);
 
   if (!seller || seller === '0' || String(seller).trim() === '') seller = 'Sitio Web';
 
@@ -325,14 +396,24 @@ const parseAndNormalizeRow = (row, rowIndex) => {
     total: Number.isFinite(total) ? total : 0,
     seller,
     estado: safeUpper(estadoRaw),
+    seguimiento: safeUpper(seguimientoRaw),
     productName,
     productKey,
     dni,
     email,
   };
 
+  // ✅ regla final (con tu matriz)
+  const decision = classifyRow(estadoRaw, seguimientoRaw);
+  normalized.decision = decision;
+
+  // descartado: sin fecha válida
   const isDiscarded = !normalized.date || Number.isNaN(normalized.date.getTime());
-  return { normalized, reasons, isDiscarded, rowIndex };
+
+  // ignorado: NO cuenta alumno y NO suma facturación (ej: Cambio horario / No inició general)
+  const isIgnored = !decision.includeCount && !decision.includeRevenue;
+
+  return { normalized, reasons, isDiscarded, isIgnored, rowIndex };
 };
 
 const abbreviateName = (name) => {
@@ -772,16 +853,19 @@ export default function App() {
         }
 
         const errors = [];
-        const processed = [];
+const processed = [];
 
-        for (let i = 0; i < raw.length; i++) {
-          const { normalized, reasons, isDiscarded, rowIndex } =
-            parseAndNormalizeRow(raw[i], i + 2);
-          if (reasons.length) errors.push({ rowIndex, reasons });
-          if (!isDiscarded) processed.push(normalized);
-        }
+for (let i = 0; i < raw.length; i++) {
+  const { normalized, reasons, isDiscarded, isIgnored, rowIndex } =
+    parseAndNormalizeRow(raw[i], i + 2);
 
-        const disc = raw.length - processed.length;
+  if (reasons.length) errors.push({ rowIndex, reasons });
+
+  // ✅ Excluir totalmente los ignorados (no cuentan ni $ ni alumnos)
+  if (!isDiscarded) processed.push(normalized);
+}
+
+const disc = raw.length - processed.length;
 
         startTransition(() => {
           setRowErrors(errors);
@@ -789,12 +873,13 @@ export default function App() {
           setRawData(processed);
           setLastSyncAt(new Date().toISOString());
         });
-      } catch {
-        setBanner({
-          type: 'error',
-          message: 'Error al procesar el CSV. Verificá formato/encoding.',
-        });
-      } finally {
+      } catch (err) {
+  console.error('CSV PROCESS ERROR:', err);
+  setBanner({
+    type: 'error',
+    message: `Error al procesar el CSV: ${err?.message || 'desconocido'}`,
+  });
+} finally {
         setLoading(false);
       }
     };
@@ -824,292 +909,359 @@ export default function App() {
 
   // Ticket promedio (válidos: total > 0)
   const validTicketStats = useMemo(() => {
-    if (!rawData.length) return { validCount: 0, validRevenue: 0, ticketAvg: 0 };
-    let validRevenue = 0;
-    let validCount = 0;
-    for (const r of rawData) {
-      if (r.total > 0) {
-        validRevenue += r.total;
-        validCount += 1;
-      }
+  if (!rawData.length) return { validCount: 0, validRevenue: 0, ticketAvg: 0 };
+
+  let validRevenue = 0;
+  let validCount = 0;
+
+  for (const r of rawData) {
+    const d = r.decision || DEFAULT_RULE;
+
+    // ✅ Ticket promedio solo sobre operaciones que SUMAN FACTURACIÓN
+    if (d.includeRevenue && r.total > 0) {
+      validRevenue += r.total;
+      validCount += 1;
     }
-    return { validCount, validRevenue, ticketAvg: validCount ? validRevenue / validCount : 0 };
-  }, [rawData]);
+  }
+
+  return {
+    validCount,
+    validRevenue,
+    ticketAvg: validCount ? validRevenue / validCount : 0,
+  };
+}, [rawData]);
 
   // --- MEMOS SEPARADOS ---
-  const baseAgg = useMemo(() => {
-    if (rawData.length === 0) return null;
+const baseAgg = useMemo(() => {
+  if (!rawData || rawData.length === 0) return null;
 
-    let totalRevenue = 0;
-    let guaranteedCount = 0;
-    let facturacionGarantizada = 0;
-    let facturacionPorGarantizar = 0;
+  let totalRevenue = 0; // ✅ FACTURACIÓN TOTAL = suma de TODOS los registros procesados
+  let totalCount = 0; // ✅ bolsa general (cantidad de alumnos / inscripciones)
+  let guaranteedCount = 0;
 
-    const timelineByDayKey = {};
-    const activityByDayKey = {};
-    const productsMap = {};
-    const uniqueRawSellersSet = new Set();
+  let facturacionGarantizada = 0;
+  let facturacionPorGarantizar = 0;
 
-    // ✅ multi-producto: personKey -> Set(productKey)
-    const personProducts = new Map();
+  const timelineByDayKey = {};
+  const activityByDayKey = {};
+  const productsMap = {};
+  const uniqueRawSellersSet = new Set();
 
-    for (const c of rawData) {
-      totalRevenue += c.total;
+  // ✅ multi-producto SOLO para quienes cuentan como alumno (bolsa general)
+  const personProducts = new Map();
 
-      if (c.estado.includes('GARANTIZADO')) {
-        guaranteedCount += 1;
-        facturacionGarantizada += c.total;
-      } else {
-        facturacionPorGarantizar += c.total;
+  for (const c of rawData) {
+    const decision = c?.decision || DEFAULT_RULE;
+
+    // ✅ FACTURACIÓN TOTAL: SIEMPRE suma (todos los registros procesados)
+    totalRevenue += Number(c?.total || 0);
+
+    // ✅ bolsa general (alumnos/inscripciones)
+    if (decision.includeCount) totalCount += 1;
+
+    // ✅ buckets de facturación (solo lo que "cuenta" por reglas)
+    if (decision.includeRevenue && decision.bucket === 'GARANTIZADA') {
+      facturacionGarantizada += Number(c?.total || 0);
+    } else if (decision.includeRevenue && decision.bucket === 'POR_GARANTIZAR') {
+      facturacionPorGarantizar += Number(c?.total || 0);
+    }
+
+    // ✅ contador "garantizadas" (cantidad)
+    if (decision.includeCount && decision.bucket === 'GARANTIZADA') {
+      guaranteedCount += 1;
+    }
+
+    // ✅ claves de día
+    const dayKey = toDayKeyLocal(c.date);
+
+    // Timeline / actividad: SOLO dinero "clasificado" (includeRevenue)
+    if (decision.includeRevenue) {
+      if (!timelineByDayKey[dayKey]) {
+        timelineByDayKey[dayKey] = { date: c.date, val: 0, count: 0 };
       }
-
-      const dayKey = toDayKeyLocal(c.date);
-
-      if (!timelineByDayKey[dayKey]) timelineByDayKey[dayKey] = { date: c.date, val: 0, count: 0 };
-      timelineByDayKey[dayKey].val += c.total;
+      timelineByDayKey[dayKey].val += Number(c?.total || 0);
       timelineByDayKey[dayKey].count += 1;
 
-      if (!activityByDayKey[dayKey]) activityByDayKey[dayKey] = { total: 0, count: 0 };
-      activityByDayKey[dayKey].total += c.total;
+      if (!activityByDayKey[dayKey]) {
+        activityByDayKey[dayKey] = { total: 0, count: 0 };
+      }
+      activityByDayKey[dayKey].total += Number(c?.total || 0);
       activityByDayKey[dayKey].count += 1;
+    }
 
-      const full = c.productName;
-      if (!productsMap[full]) productsMap[full] = { fullName: full, name: abbreviateName(full), value: 0, count: 0 };
-      productsMap[full].value += c.total;
-      productsMap[full].count += 1;
+    // Productos:
+    // - count: alumnos (includeCount)
+    // - value: dinero "clasificado" (includeRevenue)
+    const full = c.productName;
+    if (!productsMap[full]) {
+      productsMap[full] = {
+        fullName: full,
+        name: abbreviateName(full),
+        value: 0,
+        count: 0,
+      };
+    }
 
-      uniqueRawSellersSet.add(c.seller);
+    if (decision.includeRevenue) productsMap[full].value += Number(c?.total || 0);
+    if (decision.includeCount) productsMap[full].count += 1;
 
-      // ✅ personKey prefer DNI, fallback email
-      const personKey = c.dni ? `dni:${c.dni}` : c.email ? `email:${c.email}` : '';
+    uniqueRawSellersSet.add(c.seller);
+
+    // ✅ multi-producto (solo alumnos)
+    if (decision.includeCount) {
+      const personKey = c.dni
+        ? `dni:${c.dni}`
+        : c.email
+        ? `email:${c.email}`
+        : '';
+
       if (personKey) {
         if (!personProducts.has(personKey)) personProducts.set(personKey, new Set());
         personProducts.get(personKey).add(String(c.productKey || c.productName || '').trim());
       }
     }
+  }
 
-    const uniqueRawSellers = Array.from(uniqueRawSellersSet);
+  const uniqueRawSellers = Array.from(uniqueRawSellersSet);
 
-    // ✅ stats multi-producto
-    let uniqueCustomersCount = personProducts.size;
-    let multiProductCustomers = 0;
-    for (const set of personProducts.values()) {
-      if (set.size >= 2) multiProductCustomers += 1;
+  // ✅ stats multi-producto (solo alumnos)
+  const uniqueCustomersCount = personProducts.size;
+  let multiProductCustomers = 0;
+  for (const set of personProducts.values()) {
+    if (set.size >= 2) multiProductCustomers += 1;
+  }
+
+  return {
+    totalRevenue, // ✅ TOTAL para KPI "FACTURACIÓN TOTAL"
+    totalCount,
+    guaranteedCount,
+    facturacionGarantizada,
+    facturacionPorGarantizar,
+    timelineByDayKey,
+    activityByDayKey,
+    productsMap,
+    uniqueRawSellers,
+    uniqueCustomersCount,
+    multiProductCustomers,
+  };
+}, [rawData]);
+
+const sellersComputed = useMemo(() => {
+  if (!baseAgg) return null;
+
+  const { uniqueRawSellers } = baseAgg;
+
+  // --- unify seller names ---
+  const sellerNameMap = {};
+  const knownSellers = [];
+
+  uniqueRawSellers.forEach((rawSeller) => {
+    const cleanRaw = String(rawSeller || '').trim();
+    if (!cleanRaw || cleanRaw === '0' || cleanRaw.toLowerCase() === 'sitio web') {
+      sellerNameMap[rawSeller] = 'Sitio Web';
+      return;
     }
 
-    return {
-      totalRevenue,
-      totalCount: rawData.length,
-      guaranteedCount,
-      facturacionGarantizada,
-      facturacionPorGarantizar,
-      timelineByDayKey,
-      activityByDayKey,
-      productsMap,
-      uniqueRawSellers,
-      uniqueCustomersCount,
-      multiProductCustomers,
-    };
-  }, [rawData]);
-
-  const sellersComputed = useMemo(() => {
-    if (!baseAgg) return null;
-
-    const { uniqueRawSellers } = baseAgg;
-
-    // --- unify seller names ---
-    const sellerNameMap = {};
-    const knownSellers = [];
-
-    uniqueRawSellers.forEach((rawSeller) => {
-      const cleanRaw = String(rawSeller || '').trim();
-      if (!cleanRaw || cleanRaw === '0' || cleanRaw.toLowerCase() === 'sitio web') {
-        sellerNameMap[rawSeller] = 'Sitio Web';
-        return;
-      }
-
-      let foundMatch = false;
-      for (let known of knownSellers) {
-        const n1 = cleanRaw.toLowerCase().split(/\s+/);
-        const n2 = known.raw.toLowerCase().split(/\s+/);
-        const sharedWords = n1.filter((w) => n2.includes(w) && w.length > 2);
-        if (sharedWords.length > 0) {
-          const nonShared1 = n1.filter((w) => !n2.includes(w));
-          const nonShared2 = n2.filter((w) => !n1.includes(w));
-          let isPrefix = false;
-          if (nonShared1.length === 1 && nonShared2.length === 1) {
-            if (nonShared1[0].startsWith(nonShared2[0]) || nonShared2[0].startsWith(nonShared1[0])) isPrefix = true;
+    let foundMatch = false;
+    for (let known of knownSellers) {
+      const n1 = cleanRaw.toLowerCase().split(/\s+/);
+      const n2 = known.raw.toLowerCase().split(/\s+/);
+      const sharedWords = n1.filter((w) => n2.includes(w) && w.length > 2);
+      if (sharedWords.length > 0) {
+        const nonShared1 = n1.filter((w) => !n2.includes(w));
+        const nonShared2 = n2.filter((w) => !n1.includes(w));
+        let isPrefix = false;
+        if (nonShared1.length === 1 && nonShared2.length === 1) {
+          if (nonShared1[0].startsWith(nonShared2[0]) || nonShared2[0].startsWith(nonShared1[0])) isPrefix = true;
+        }
+        const isSubset = nonShared1.length === 0 || nonShared2.length === 0;
+        const isApud = cleanRaw.toLowerCase().includes('apud') && known.raw.toLowerCase().includes('apud');
+        if (isPrefix || isSubset || isApud) {
+          foundMatch = true;
+          if (cleanRaw.length > known.display.length) {
+            known.display = cleanRaw
+              .split(' ')
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+              .join(' ');
           }
-          const isSubset = nonShared1.length === 0 || nonShared2.length === 0;
-          const isApud = cleanRaw.toLowerCase().includes('apud') && known.raw.toLowerCase().includes('apud');
-          if (isPrefix || isSubset || isApud) {
-            foundMatch = true;
-            if (cleanRaw.length > known.display.length) {
-              known.display = cleanRaw
-                .split(' ')
-                .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-                .join(' ');
-            }
-            sellerNameMap[rawSeller] = known;
-            break;
-          }
+          sellerNameMap[rawSeller] = known;
+          break;
         }
       }
+    }
 
-      if (!foundMatch) {
-        const display = cleanRaw
-          .split(' ')
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          .join(' ');
-        const newKnown = { raw: cleanRaw, display };
-        knownSellers.push(newKnown);
-        sellerNameMap[rawSeller] = newKnown;
-      }
-    });
+    if (!foundMatch) {
+      const display = cleanRaw
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+      const newKnown = { raw: cleanRaw, display };
+      knownSellers.push(newKnown);
+      sellerNameMap[rawSeller] = newKnown;
+    }
+  });
 
-    Object.keys(sellerNameMap).forEach((k) => {
-      if (typeof sellerNameMap[k] === 'object') sellerNameMap[k] = sellerNameMap[k].display;
-    });
+  Object.keys(sellerNameMap).forEach((k) => {
+    if (typeof sellerNameMap[k] === 'object') sellerNameMap[k] = sellerNameMap[k].display;
+  });
 
-    // --- aggregate sellers ---
-    const sellersMap = {};
+  // --- aggregate sellers ---
+  const sellersMap = {};
 
-    for (const c of rawData) {
-      const unifiedName = sellerNameMap[c.seller] || 'Sitio Web';
-      if (!sellersMap[unifiedName]) {
-        sellersMap[unifiedName] = {
-          name: unifiedName,
-          val: 0,
-          count: 0,
-          daily: {},
-          countDaily: {},
-          garantizadas: 0,
-          facturacionGarantizada: 0,
-        };
-      }
+  for (const c of rawData) {
+    const decision = c.decision || DEFAULT_RULE;
+    const unifiedName = sellerNameMap[c.seller] || 'Sitio Web';
 
-      const s = sellersMap[unifiedName];
+    if (!sellersMap[unifiedName]) {
+      sellersMap[unifiedName] = {
+        name: unifiedName,
+
+        // $ (solo revenue real)
+        val: 0,
+
+        // "ventas"/alumnos (bolsa general)
+        count: 0,
+
+        // trends:
+        daily: {},       // $ por día
+        countDaily: {},  // count por día
+
+        garantizadas: 0,             // count garantizadas
+        facturacionGarantizada: 0,   // $ garantizada
+      };
+    }
+
+    const s = sellersMap[unifiedName];
+
+    // ✅ $ solo si incluye revenue
+    if (decision.includeRevenue) {
       s.val += c.total;
-      s.count += 1;
-
-      if (c.estado.includes('GARANTIZADO')) {
-        s.garantizadas += 1;
-        s.facturacionGarantizada += c.total;
-      }
-
-      const dayKey = toDayKeyLocal(c.date);
-      s.daily[dayKey] = (s.daily[dayKey] || 0) + c.total;
-      s.countDaily[dayKey] = (s.countDaily[dayKey] || 0) + 1;
+const dayKey = toDayKeyLocal(c.date);
+s.daily[dayKey] = (s.daily[dayKey] || 0) + c.total;
     }
 
-    const sellers = Object.values(sellersMap)
-      .map((s) => {
-        const trendRaw = Object.entries(s.daily)
-          .map(([dayKey, val]) => {
-            const [yy, mm, dd] = dayKey.split('-').map(Number);
-            const dt = new Date(yy, mm - 1, dd, 12, 0, 0);
-            return { date: dt, val, count: s.countDaily[dayKey] };
-          })
-          .sort((a, b) => a.date - b.date);
-
-        // ✅ trend con axis + date (para XAxis y tooltip)
-        const trend = trendRaw.map((t) => ({
-          date: t.date,
-          axis: fmtAxisDate(t.date),
-          val: t.val,
-          count: t.count,
-        }));
-
-        const uniqueDays = trend.length || 1;
-        return { ...s, trend, promDia: s.val / uniqueDays };
-      })
-      .sort((a, b) => b.val - a.val);
-
-    return sellers;
-  }, [baseAgg, rawData]);
-
-  const audit = useMemo(() => {
-    if (!baseAgg) return null;
-
-    const {
-      totalRevenue,
-      totalCount,
-      guaranteedCount,
-      facturacionGarantizada,
-      facturacionPorGarantizar,
-      timelineByDayKey,
-      activityByDayKey,
-      productsMap,
-      uniqueCustomersCount,
-      multiProductCustomers,
-    } = baseAgg;
-
-    // ✅ timelineData: axis + date
-    const timelineData = Object.entries(timelineByDayKey)
-      .map(([dayKey, v]) => {
-        const [yy, mm, dd] = dayKey.split('-').map(Number);
-        const dt = new Date(yy, mm - 1, dd, 12, 0, 0);
-        return {
-          date: dt,
-          axis: fmtAxisDate(dt),
-          val: v.val,
-          count: v.count,
-        };
-      })
-      .sort((a, b) => a.date - b.date);
-
-    // activityTimeline: últimos 30 días desde maxDate
-    const maxTime = Math.max(...rawData.map((d) => d.date.getTime()));
-    const maxDate = new Date(maxTime);
-
-    const activityTimeline = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(maxDate);
-      d.setDate(d.getDate() - i);
-
-      const dayKey = toDayKeyLocal(d);
-      const entry = activityByDayKey[dayKey];
-
-      const total = entry ? entry.total : 0;
-      const count = entry ? entry.count : 0;
-
-      activityTimeline.push({
-        date: d,
-        axis: fmtAxisDate(d),
-        total,
-        count,
-        isZero: total === 0,
-      });
+    // ✅ count solo si incluye count (bolsa general)
+    if (decision.includeCount) {
+       s.count += 1;
+  const dayKey = toDayKeyLocal(c.date);
+  s.countDaily[dayKey] = (s.countDaily[dayKey] || 0) + 1;
     }
 
-    const maxActivityVal = Math.max(...activityTimeline.map((a) => a.total)) || 1;
+    // ✅ garantizadas
+    if (decision.bucket === 'GARANTIZADA') {
+      if (decision.includeCount) s.garantizadas += 1;
+      if (decision.includeRevenue) s.facturacionGarantizada += c.total;
+    }
+  }
 
-    const productsAll = Object.values(productsMap).sort((a, b) => b.value - a.value);
+  const sellers = Object.values(sellersMap)
+    .map((s) => {
+      const trendRaw = Object.entries(s.daily)
+        .map(([dayKey, val]) => {
+          const [yy, mm, dd] = dayKey.split('-').map(Number);
+          const dt = new Date(yy, mm - 1, dd, 12, 0, 0);
+          return { date: dt, val, count: s.countDaily[dayKey] || 0 };
+        })
+        .sort((a, b) => a.date - b.date);
 
-    // promedio diario por días con actividad (no /30 fijo)
-    const periodTotal = activityTimeline.reduce((s, a) => s + a.total, 0);
-    const activeDays = activityTimeline.reduce((c, a) => c + (a.total > 0 ? 1 : 0), 0) || 1;
-    const promDiarioPeriodo = periodTotal / activeDays;
+      const trend = trendRaw.map((t) => ({
+        date: t.date,
+        axis: fmtAxisDate(t.date),
+        val: t.val,
+        count: t.count,
+      }));
 
-    return {
-      totalRevenue,
-      totalCount,
-      guaranteedCount,
-      timelineData,
-      activityTimeline,
-      maxActivityVal,
-      sellers: sellersComputed || [],
-      top3Products: productsAll.slice(0, 3),
-      productsPie: productsAll.slice(0, 5),
-      productsAll,
-      facturacionGarantizada,
-      facturacionPorGarantizar,
-      promDiarioPeriodo,
-      activeDays,
-      uniqueCustomersCount,
-      multiProductCustomers,
-    };
-  }, [baseAgg, rawData, sellersComputed]);
+      const uniqueDays = trend.length || 1;
+      return { ...s, trend, promDia: s.val / uniqueDays };
+    })
+    .sort((a, b) => b.val - a.val);
+
+  return sellers;
+}, [baseAgg, rawData]);
+
+const audit = useMemo(() => {
+  if (!baseAgg) return null;
+
+  const {
+    totalRevenue,               // ✅ suma de TODOS los registros (ya lo arreglaste en baseAgg)
+    totalCount,
+    guaranteedCount,
+    facturacionGarantizada,
+    facturacionPorGarantizar,
+    timelineByDayKey,
+    activityByDayKey,
+    productsMap,
+    uniqueCustomersCount,
+    multiProductCustomers,
+  } = baseAgg;
+
+  // ✅ timelineData: axis + date
+  const timelineData = Object.entries(timelineByDayKey || {})
+    .map(([dayKey, v]) => {
+      const [yy, mm, dd] = dayKey.split('-').map(Number);
+      const dt = new Date(yy, mm - 1, dd, 12, 0, 0);
+      return {
+        date: dt,
+        axis: fmtAxisDate(dt),
+        val: v.val,
+        count: v.count,
+      };
+    })
+    .sort((a, b) => a.date - b.date);
+
+  // activityTimeline: últimos 30 días desde maxDate
+  const maxTime =
+    rawData?.length ? Math.max(...rawData.map((d) => d.date?.getTime?.() || 0)) : 0;
+  const maxDate = maxTime ? new Date(maxTime) : new Date();
+
+  const activityTimeline = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(maxDate);
+    d.setDate(d.getDate() - i);
+
+    const dayKey = toDayKeyLocal(d);
+    const entry = activityByDayKey?.[dayKey];
+
+    const total = entry ? entry.total : 0;
+    const count = entry ? entry.count : 0;
+
+    activityTimeline.push({
+      date: d,
+      axis: fmtAxisDate(d),
+      total,
+      count,
+      isZero: total === 0,
+    });
+  }
+
+  const maxActivityVal = Math.max(...activityTimeline.map((a) => a.total)) || 1;
+
+  const productsAll = Object.values(productsMap || {}).sort((a, b) => b.value - a.value);
+
+  // promedio diario por días con actividad (no /30 fijo)
+  const periodTotal = activityTimeline.reduce((s, a) => s + a.total, 0);
+  const activeDays = activityTimeline.reduce((c, a) => c + (a.total > 0 ? 1 : 0), 0) || 1;
+  const promDiarioPeriodo = periodTotal / activeDays;
+
+  return {
+    totalRevenue, // ✅ FACTURACIÓN TOTAL (todos los registros)
+    totalCount,
+    guaranteedCount,
+    timelineData,
+    activityTimeline,
+    maxActivityVal,
+    sellers: sellersComputed || [],
+    top3Products: productsAll.slice(0, 3),
+    productsPie: productsAll.slice(0, 5),
+    productsAll,
+    facturacionGarantizada,
+    facturacionPorGarantizar,
+    promDiarioPeriodo,
+    activeDays,
+    uniqueCustomersCount,
+    multiProductCustomers,
+  };
+}, [baseAgg, rawData, sellersComputed]);
 
   const fmt = (v) => fmtCurrency.format(v);
 
