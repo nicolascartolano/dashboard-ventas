@@ -329,6 +329,8 @@ const COL_ALIASES = {
   email: ['Email', 'email', 'Correo', 'correo', 'Mail', 'mail'],
   camada: ['Camada', 'camada', 'Código Camada', 'codigo_camada', 'Cohorte', 'cohorte', 'Cod Camada', 'cod_camada'],
   seguimiento: ['Seguimiento', 'seguimiento', 'Etiqueta', 'etiqueta'],
+  sede: ['Sede', 'sede'],
+  modalidad: ['Modalidad', 'modalidad'],
 };
 
 const pickFirst = (row, keys) => {
@@ -383,25 +385,42 @@ const parseAndNormalizeRow = (row, rowIndex) => {
   const camadaRaw = pickFirst(row, COL_ALIASES.camada);
   const productKey = String(camadaRaw || '').trim() || String(productName || '').trim();
 
-  const dniRaw = pickFirst(row, COL_ALIASES.dni);
-  const emailRaw = pickFirst(row, COL_ALIASES.email);
-  const dni = normalizeDNI(dniRaw);
-  const email = normalizeEmail(emailRaw);
+const dniRaw = pickFirst(row, COL_ALIASES.dni);
+const emailRaw = pickFirst(row, COL_ALIASES.email);
+const sedeRaw = pickFirst(row, COL_ALIASES.sede);
+const modalidadRaw = pickFirst(row, COL_ALIASES.modalidad);
 
-  const normalized = {
-    ...row,
-    date: dateObj,
-    amount: Number.isFinite(amount) ? amount : 0,
-    matricula: Number.isFinite(matricula) ? matricula : 0,
-    total: Number.isFinite(total) ? total : 0,
-    seller,
-    estado: safeUpper(estadoRaw),
-    seguimiento: safeUpper(seguimientoRaw),
-    productName,
-    productKey,
-    dni,
-    email,
-  };
+const dni = normalizeDNI(dniRaw);
+const email = normalizeEmail(emailRaw);
+
+// ✅ Normalizamos modalidad: SINCRONICA / SINCRÓNICA -> PRESENCIAL (sin tildes)
+let modalidadNorm = String(modalidadRaw || '').trim();
+
+if (modalidadNorm) {
+  const upNoTilde = modalidadNorm
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // saca tildes
+
+  modalidadNorm = upNoTilde === 'SINCRONICA' ? 'PRESENCIAL' : upNoTilde;
+}
+
+const normalized = {
+  ...row,
+  date: dateObj,
+  sede: safeUpper(String(sedeRaw || '').trim()),
+  modalidad: modalidadNorm,
+  amount: Number.isFinite(amount) ? amount : 0,
+  matricula: Number.isFinite(matricula) ? matricula : 0,
+  total: Number.isFinite(total) ? total : 0,
+  seller,
+  estado: safeUpper(estadoRaw),
+  seguimiento: safeUpper(seguimientoRaw),
+  productName,
+  productKey,
+  dni,
+  email,
+};
 
   // ✅ regla final (con tu matriz)
   const decision = classifyRow(estadoRaw, seguimientoRaw);
@@ -742,9 +761,12 @@ const CustomPieTooltip = ({ active, payload, fmt, totalRevenue }) => {
 export default function App() {
   const [rawData, setRawData] = useState([]);
   const [targetBimestral, setTargetBimestral] = useState(58000000);
+  const [filterSede, setFilterSede] = useState('TODAS');
+  const [filterModalidad, setFilterModalidad] = useState('TODAS');
   const [customLogo, setCustomLogo] = useState(DEFAULT_LOGO_URL);
   const [activeIndex, setActiveIndex] = useState(null);
   const [expandedSeller, setExpandedSeller] = useState(null);
+  const isMendoza = safeUpper(filterSede) === 'MENDOZA';
 
   // ✅ PROM. DIARIO (PERIODO): top 3 picos
   const [showTopPicos, setShowTopPicos] = useState(false);
@@ -862,7 +884,7 @@ for (let i = 0; i < raw.length; i++) {
   if (reasons.length) errors.push({ rowIndex, reasons });
 
   // ✅ Excluir totalmente los ignorados (no cuentan ni $ ni alumnos)
-  if (!isDiscarded) processed.push(normalized);
+  if (!isDiscarded && !isIgnored) processed.push(normalized);
 }
 
 const disc = raw.length - processed.length;
@@ -907,17 +929,88 @@ const disc = raw.length - processed.length;
     setDiscardedCount(0);
   };
 
-  // Ticket promedio (válidos: total > 0)
+const sedeOptions = useMemo(() => {
+  const set = new Set();
+  for (const r of rawData) {
+    const s = String(r?.sede || '').trim().toUpperCase();
+    if (s) set.add(s);
+  }
+  return ['TODAS', ...Array.from(set).sort()];
+}, [rawData]);
+
+const filteredData = useMemo(() => {
+  const fs = safeUpper(filterSede);
+  const fm = safeUpper(filterModalidad);
+
+  return (rawData || []).filter((r) => {
+    const sede = safeUpper(r?.sede);
+    const mod = safeUpper(r?.modalidad);
+
+    if (fs !== 'TODAS' && sede !== fs) return false;
+
+    if (fs === 'MENDOZA') return mod === 'PRESENCIAL'; // regla dura
+
+    if (fm !== 'TODAS' && mod !== fm) return false;
+
+    return true;
+  });
+}, [rawData, filterSede, filterModalidad]);
+
+
+useEffect(() => {
+  const fs = safeUpper(filterSede);
+
+  if (fs === 'MENDOZA') {
+    if (filterModalidad !== 'PRESENCIAL') setFilterModalidad('PRESENCIAL');
+    return;
+  }
+
+  // recalculamos "existe" sin depender de modalidadOptions
+  const set = new Set(
+    (rawData || [])
+      .filter((r) => filterSede === 'TODAS' || String(r?.sede || '').trim() === filterSede)
+      .map((r) => safeUpper(String(r?.modalidad || '').trim()))
+      .filter(Boolean)
+  );
+
+  if (filterModalidad !== 'TODAS' && !set.has(safeUpper(filterModalidad))) {
+    setFilterModalidad('TODAS');
+  }
+}, [filterSede, filterModalidad, rawData]);
+
+const modalidadOptions = useMemo(() => {
+  const fs = safeUpper(filterSede);
+  if (fs === 'MENDOZA') return ['PRESENCIAL'];
+
+  const set = new Set();
+  for (const r of rawData) {
+    if (filterSede !== 'TODAS' && String(r?.sede || '').trim() !== filterSede) continue;
+    const v = safeUpper(String(r?.modalidad || '').trim());
+    if (v) set.add(v);
+  }
+  return ['TODAS', ...Array.from(set).sort()];
+}, [rawData, filterSede]);
+
+useEffect(() => {
+  if (safeUpper(filterSede) === 'MENDOZA') {
+    if (filterModalidad !== 'PRESENCIAL') setFilterModalidad('PRESENCIAL');
+    return;
+  }
+  if (filterModalidad !== 'TODAS' && !modalidadOptions.includes(filterModalidad)) {
+    setFilterModalidad('TODAS');
+  }
+}, [filterSede, filterModalidad, modalidadOptions]);
+
+// Ticket promedio
   const validTicketStats = useMemo(() => {
-  if (!rawData.length) return { validCount: 0, validRevenue: 0, ticketAvg: 0 };
+  if (!filteredData.length) return { validCount: 0, validRevenue: 0, ticketAvg: 0 };
 
   let validRevenue = 0;
   let validCount = 0;
 
-  for (const r of rawData) {
+  for (const r of filteredData) {
     const d = r.decision || DEFAULT_RULE;
 
-    // ✅ Ticket promedio solo sobre operaciones que SUMAN FACTURACIÓN
     if (d.includeRevenue && r.total > 0) {
       validRevenue += r.total;
       validCount += 1;
@@ -929,11 +1022,11 @@ const disc = raw.length - processed.length;
     validRevenue,
     ticketAvg: validCount ? validRevenue / validCount : 0,
   };
-}, [rawData]);
+}, [filteredData]);
 
   // --- MEMOS SEPARADOS ---
 const baseAgg = useMemo(() => {
-  if (!rawData || rawData.length === 0) return null;
+  if (!filteredData || filteredData.length === 0) return null;
 
   let totalRevenue = 0; // ✅ FACTURACIÓN TOTAL = suma de TODOS los registros procesados
   let totalCount = 0; // ✅ bolsa general (cantidad de alumnos / inscripciones)
@@ -950,7 +1043,7 @@ const baseAgg = useMemo(() => {
   // ✅ multi-producto SOLO para quienes cuentan como alumno (bolsa general)
   const personProducts = new Map();
 
-  for (const c of rawData) {
+  for (const c of filteredData)  {
     const decision = c?.decision || DEFAULT_RULE;
 
     // ✅ FACTURACIÓN TOTAL: SIEMPRE suma (todos los registros procesados)
@@ -1044,7 +1137,7 @@ const baseAgg = useMemo(() => {
     uniqueCustomersCount,
     multiProductCustomers,
   };
-}, [rawData]);
+}, [filteredData]);
 
 const sellersComputed = useMemo(() => {
   if (!baseAgg) return null;
@@ -1108,7 +1201,7 @@ const sellersComputed = useMemo(() => {
   // --- aggregate sellers ---
   const sellersMap = {};
 
-  for (const c of rawData) {
+  for (const c of filteredData) {
     const decision = c.decision || DEFAULT_RULE;
     const unifiedName = sellerNameMap[c.seller] || 'Sitio Web';
 
@@ -1177,7 +1270,7 @@ s.daily[dayKey] = (s.daily[dayKey] || 0) + c.total;
     .sort((a, b) => b.val - a.val);
 
   return sellers;
-}, [baseAgg, rawData]);
+}, [baseAgg, filteredData]);
 
 const audit = useMemo(() => {
   if (!baseAgg) return null;
@@ -1211,7 +1304,7 @@ const audit = useMemo(() => {
 
   // activityTimeline: últimos 30 días desde maxDate
   const maxTime =
-    rawData?.length ? Math.max(...rawData.map((d) => d.date?.getTime?.() || 0)) : 0;
+  filteredData?.length ? Math.max(...filteredData.map((d) => d.date?.getTime?.() || 0)) : 0;
   const maxDate = maxTime ? new Date(maxTime) : new Date();
 
   const activityTimeline = [];
@@ -1261,7 +1354,7 @@ const audit = useMemo(() => {
     uniqueCustomersCount,
     multiProductCustomers,
   };
-}, [baseAgg, rawData, sellersComputed]);
+}, [baseAgg, filteredData, sellersComputed]);
 
   const fmt = (v) => fmtCurrency.format(v);
 
@@ -1377,6 +1470,40 @@ const audit = useMemo(() => {
           </div>
         ) : (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.35em] text-white/40">
+              Filtros
+            </div>
+
+            <select
+              value={filterSede}
+              onChange={(e) => setFilterSede(e.target.value)}
+              className="bg-[#0a0a0a] border border-white/10 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white/80 outline-none"
+              title="Filtrar por sede"
+            >
+              {sedeOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filterModalidad}
+              onChange={(e) => setFilterModalidad(e.target.value)}
+              disabled={isMendoza}
+              className="bg-[#0a0a0a] border border-white/10 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white/80 outline-none"
+              title="Filtrar por modalidad"
+            >
+              {modalidadOptions.map((m) => (
+                <option key={m} value={m}>
+                {m === "SINCRONICA" || m === "SINCRÓNICA" ? "PRESENCIAL" : m}
+                 </option>
+              ))}
+            </select>
+          </div>
+        </div>
             {/* KPI Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <GlowCard className="bg-[#0a0a0a] p-8 rounded-[2rem] flex flex-col justify-between h-52">
